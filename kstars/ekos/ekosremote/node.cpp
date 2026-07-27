@@ -1,4 +1,4 @@
-/* EkosLive Node
+/* EkosRemote Node
 
     SPDX-FileCopyrightText: 2023 Jasem Mutlaq <mutlaqja@ikarustech.com>
 
@@ -21,20 +21,45 @@
 #include <basedevice.h>
 #include <QUuid>
 
-namespace EkosLive
+namespace EkosRemote
 {
 Node::Node(const QString &name) : m_Name(name)
 {
-    connect(&m_WebSocket, &QWebSocket::connected, this, &Node::onConnected);
-    connect(&m_WebSocket, &QWebSocket::disconnected, this, &Node::onDisconnected);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    connect(&m_WebSocket, &QWebSocket::errorOccurred, this, &Node::onError);
-#else
-    connect(&m_WebSocket, static_cast<void(QWebSocket::*)(QAbstractSocket::SocketError)>(&QWebSocket::error), this,
-            &Node::onError);
-#endif
+    m_WebSocket = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
+    wireSocket();
 
     m_Path = "/" + m_Name + "/ekos";
+}
+
+void Node::wireSocket()
+{
+    connect(m_WebSocket, &QWebSocket::connected, this, &Node::onConnected);
+    connect(m_WebSocket, &QWebSocket::disconnected, this, &Node::onDisconnected);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    connect(m_WebSocket, &QWebSocket::errorOccurred, this, &Node::onError);
+#else
+    connect(m_WebSocket, static_cast<void(QWebSocket::*)(QAbstractSocket::SocketError)>(&QWebSocket::error), this,
+            &Node::onError);
+#endif
+}
+
+void Node::adoptSocket(QWebSocket *socket)
+{
+    if (m_WebSocket)
+    {
+        m_WebSocket->disconnect(this);
+        m_WebSocket->deleteLater();
+    }
+
+    m_WebSocket = socket;
+    m_WebSocket->setParent(this);
+    wireSocket();
+
+    // The socket is already connected by the time QWebSocketServer hands it over —
+    // QWebSocket::connected already fired before we owned it, so drive the same
+    // state transition onConnected() does directly rather than waiting for a signal
+    // that already happened.
+    onConnected();
 }
 
 void Node::connectServer()
@@ -52,7 +77,7 @@ void Node::connectServer()
     QUrl requestURL(m_URL);
 
     QUrlQuery query;
-    query.addQueryItem("observatory", Options::ekosLiveObservatory());
+    query.addQueryItem("observatory", Options::ekosRemoteObservatory());
     query.addQueryItem("username", m_AuthResponse["username"].toString());
     query.addQueryItem("token", m_AuthResponse["token"].toString());
     if (m_AuthResponse.contains("remoteToken"))
@@ -78,7 +103,7 @@ void Node::connectServer()
                                  10) << "..."; // Log part of token
     }
 
-    m_WebSocket.open(requestURL);
+    m_WebSocket->open(requestURL);
 
     qCInfo(KSTARS_EKOS) << "Connecting to " << m_Name << "Websocket server at" << requestURL.toDisplayString();
 }
@@ -93,7 +118,7 @@ void Node::disconnectServer()
     }
 
     m_isConnectingOrDisconnecting = true;
-    m_WebSocket.close();
+    m_WebSocket->close();
 }
 
 void Node::onConnected()
@@ -104,8 +129,8 @@ void Node::onConnected()
     m_ReconnectTries = 0;
     m_isConnectingOrDisconnecting = false; // Reset flag on successful connection
 
-    connect(&m_WebSocket, &QWebSocket::textMessageReceived,  this, &Node::onTextReceived, Qt::UniqueConnection);
-    connect(&m_WebSocket, &QWebSocket::binaryMessageReceived,  this, &Node::onBinaryReceived, Qt::UniqueConnection);
+    connect(m_WebSocket, &QWebSocket::textMessageReceived,  this, &Node::onTextReceived, Qt::UniqueConnection);
+    connect(m_WebSocket, &QWebSocket::binaryMessageReceived,  this, &Node::onBinaryReceived, Qt::UniqueConnection);
 
     Q_EMIT connected();
 }
@@ -116,8 +141,8 @@ void Node::onDisconnected()
     m_isConnected = false;
     m_isConnectingOrDisconnecting = false; // Reset flag on disconnection
 
-    disconnect(&m_WebSocket, &QWebSocket::textMessageReceived,  this, &Node::onTextReceived);
-    disconnect(&m_WebSocket, &QWebSocket::binaryMessageReceived,  this, &Node::onBinaryReceived);
+    disconnect(m_WebSocket, &QWebSocket::textMessageReceived,  this, &Node::onTextReceived);
+    disconnect(m_WebSocket, &QWebSocket::binaryMessageReceived,  this, &Node::onBinaryReceived);
 
     Q_EMIT disconnected();
 }
@@ -126,7 +151,7 @@ void Node::onError(QAbstractSocket::SocketError error)
 {
     Q_UNUSED(error)
     qCritical(KSTARS_EKOS) << m_Name << "Websocket connection error from" << m_URL.toDisplayString() << ":" <<
-                           m_WebSocket.errorString();
+                           m_WebSocket->errorString();
 
     // When a websocket error occurs, the node is for all intents and purposes disconnected.
     // The QWebSocket::disconnected signal should also be emitted, but we call onDisconnected()
@@ -145,7 +170,7 @@ void Node::sendEvent(const QString &command, const QJsonObject &payload)
     if (m_isConnected == false)
         return;
 
-    m_WebSocket.sendTextMessage(QJsonDocument({{"type", command}, {"payload", payload}}).toJson(QJsonDocument::Compact));
+    m_WebSocket->sendTextMessage(QJsonDocument({{"type", command}, {"payload", payload}}).toJson(QJsonDocument::Compact));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -156,7 +181,7 @@ void Node::sendResponse(const QString &command, const QJsonObject &payload)
     if (m_isConnected == false || m_ClientState == false)
         return;
 
-    m_WebSocket.sendTextMessage(QJsonDocument({{"type", command}, {"payload", payload}}).toJson(QJsonDocument::Compact));
+    m_WebSocket->sendTextMessage(QJsonDocument({{"type", command}, {"payload", payload}}).toJson(QJsonDocument::Compact));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -167,7 +192,7 @@ void Node::sendResponse(const QString &command, const QJsonArray &payload)
     if (m_isConnected == false || m_ClientState == false)
         return;
 
-    m_WebSocket.sendTextMessage(QJsonDocument({{"type", command}, {"payload", payload}}).toJson(QJsonDocument::Compact));
+    m_WebSocket->sendTextMessage(QJsonDocument({{"type", command}, {"payload", payload}}).toJson(QJsonDocument::Compact));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -178,7 +203,7 @@ void Node::sendResponse(const QString &command, const QString &payload)
     if (m_isConnected == false || m_ClientState == false)
         return;
 
-    m_WebSocket.sendTextMessage(QJsonDocument({{"type", command}, {"payload", payload}}).toJson(QJsonDocument::Compact));
+    m_WebSocket->sendTextMessage(QJsonDocument({{"type", command}, {"payload", payload}}).toJson(QJsonDocument::Compact));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -189,7 +214,7 @@ void Node::sendResponse(const QString &command, bool payload)
     if (m_isConnected == false || m_ClientState == false)
         return;
 
-    m_WebSocket.sendTextMessage(QJsonDocument({{"type", command}, {"payload", payload}}).toJson(QJsonDocument::Compact));
+    m_WebSocket->sendTextMessage(QJsonDocument({{"type", command}, {"payload", payload}}).toJson(QJsonDocument::Compact));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -199,7 +224,7 @@ void Node::sendTextMessage(const QString &message)
 {
     if (m_isConnected == false || m_ClientState == false)
         return;
-    m_WebSocket.sendTextMessage(message);
+    m_WebSocket->sendTextMessage(message);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -215,7 +240,7 @@ void Node::sendBinaryMessage(const QByteArray &message, bool bypassClientStateCh
     if (m_isConnected == false || (m_ClientState == false && bypassClientStateCheck == false))
         return;
 
-    m_WebSocket.sendBinaryMessage(message);
+    m_WebSocket->sendBinaryMessage(message);
 }
 
 }

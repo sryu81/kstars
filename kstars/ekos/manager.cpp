@@ -52,9 +52,9 @@
 #include "ekos/auxiliary/rotatorutils.h"
 #include "ekos/align/pushtoassistant.h"
 
-#include "ekoslive/ekosliveclient.h"
-#include "ekoslive/message.h"
-#include "ekoslive/media.h"
+#include "ekosremote/ekosremoteserver.h"
+#include "ekosremote/message.h"
+#include "ekosremote/media.h"
 
 #include <basedevice.h>
 
@@ -155,51 +155,51 @@ Manager::Manager(QWidget * parent) : QDialog(parent), m_networkManager(this)
     connect(connectB, &QPushButton::clicked, this, &Ekos::Manager::connectDevices);
     connect(disconnectB, &QPushButton::clicked, this, &Ekos::Manager::disconnectDevices);
 
-    // Init EkosLive client
-    ekosLiveB->setAttribute(Qt::WA_LayoutUsesWidgetRect);
-    ekosLiveClient.reset(new EkosLive::Client(this));
-    connect(ekosLiveClient.get(), &EkosLive::Client::connected, this, [this]()
+    // Init EkosRemote client
+    ekosRemoteB->setAttribute(Qt::WA_LayoutUsesWidgetRect);
+    ekosRemote.reset(new EkosRemote::Server(this));
+    connect(ekosRemote.get(), &EkosRemote::Server::connected, this, [this]()
     {
-        Q_EMIT ekosLiveStatusChanged(true);
+        Q_EMIT ekosRemoteStatusChanged(true);
     });
-    connect(ekosLiveClient.get(), &EkosLive::Client::disconnected, this, [this]()
+    connect(ekosRemote.get(), &EkosRemote::Server::disconnected, this, [this]()
     {
-        Q_EMIT ekosLiveStatusChanged(false);
+        Q_EMIT ekosRemoteStatusChanged(false);
     });
 
     // INDI Control Panel
     //connect(controlPanelB, &QPushButton::clicked, GUIManager::Instance(), SLOT(show()));
-    connect(ekosLiveB, &QPushButton::clicked, this, [&]()
+    connect(ekosRemoteB, &QPushButton::clicked, this, [&]()
     {
-        ekosLiveClient.get()->show();
-        ekosLiveClient.get()->raise();
+        ekosRemote.get()->show();
+        ekosRemote.get()->raise();
     });
 
-    connect(this, &Manager::ekosStatusChanged, ekosLiveClient.get()->message(), &EkosLive::Message::setEkosStatingStatus);
-    connect(this, &Manager::indiStatusChanged, ekosLiveClient.get()->message(), &EkosLive::Message::setINDIStatus);
-    connect(ekosLiveClient.get()->message(), &EkosLive::Message::connected, this, [&]()
+    connect(this, &Manager::ekosStatusChanged, ekosRemote.get()->message(), &EkosRemote::Message::setEkosStatingStatus);
+    connect(this, &Manager::indiStatusChanged, ekosRemote.get()->message(), &EkosRemote::Message::setINDIStatus);
+    connect(ekosRemote.get()->message(), &EkosRemote::Message::connected, this, [&]()
     {
-        ekosLiveB->setIcon(QIcon(":/icons/cloud-online.svg"));
+        ekosRemoteB->setIcon(QIcon(":/icons/cloud-online.svg"));
     });
-    connect(ekosLiveClient.get()->message(), &EkosLive::Message::disconnected, this, [&]()
+    connect(ekosRemote.get()->message(), &EkosRemote::Message::disconnected, this, [&]()
     {
-        ekosLiveB->setIcon(QIcon::fromTheme("folder-cloud"));
+        ekosRemoteB->setIcon(QIcon::fromTheme("folder-cloud"));
     });
-    connect(ekosLiveClient.get()->media(), &EkosLive::Media::newBoundingRect, ekosLiveClient.get()->message(),
-            &EkosLive::Message::setBoundingRect);
-    connect(ekosLiveClient.get()->message(), &EkosLive::Message::resetPolarView, ekosLiveClient.get()->media(),
-            &EkosLive::Media::resetPolarView);
-    connect(KSMessageBox::Instance(), &KSMessageBox::newMessage, ekosLiveClient.get()->message(),
-            &EkosLive::Message::sendDialog);
+    connect(ekosRemote.get()->media(), &EkosRemote::Media::newBoundingRect, ekosRemote.get()->message(),
+            &EkosRemote::Message::setBoundingRect);
+    connect(ekosRemote.get()->message(), &EkosRemote::Message::resetPolarView, ekosRemote.get()->media(),
+            &EkosRemote::Media::resetPolarView);
+    connect(KSMessageBox::Instance(), &KSMessageBox::newMessage, ekosRemote.get()->message(),
+            &EkosRemote::Message::sendDialog);
 
     auto tiles = KStarsData::Instance()->skyComposite()->mosaicComponent()->tiles();
     if (tiles)
     {
         tiles->setUpdateCallback([this](const QJsonObject & tiles)
         {
-            if (ekosLiveClient && ekosLiveClient->message())
+            if (ekosRemote && ekosRemote->message())
             {
-                ekosLiveClient->message()->sendMosaicTiles(tiles);
+                ekosRemote->message()->sendMosaicTiles(tiles);
             }
         });
     }
@@ -216,7 +216,7 @@ Manager::Manager(QWidget * parent) : QDialog(parent), m_networkManager(this)
                 m_PortSelector->show();
                 m_PortSelector->raise();
 
-                ekosLiveClient.get()->message()->requestPortSelection(true);
+                ekosRemote.get()->message()->requestPortSelection(true);
             }
             // If port selector is enabled, but we have zero ports to work with, let's proceed to connecting if it is enabled.
             else if (m_CurrentProfile->autoConnect)
@@ -401,12 +401,12 @@ Manager::Manager(QWidget * parent) : QDialog(parent), m_networkManager(this)
     capturePreview->shareSchedulerModuleState(schedulerModule()->moduleState());
     connect(schedulerModule()->process().data(), &SchedulerProcess::newLog, this, &Ekos::Manager::updateLog);
     connect(schedulerModule(), &Ekos::Scheduler::newTarget, this, &Manager::setTarget);
-    // Scheduler <---> EkosLive connections
-    connect(schedulerModule(), &Ekos::Scheduler::jobsUpdated, ekosLiveClient.get()->message(),
-            &EkosLive::Message::sendSchedulerJobs, Qt::UniqueConnection);
-    connect(schedulerModule(), &Ekos::Scheduler::settingsUpdated, ekosLiveClient.get()->message(),
-            &EkosLive::Message::sendSchedulerSettings, Qt::UniqueConnection);
-    connect(schedulerModule()->process().data(), &SchedulerProcess::newLog, ekosLiveClient.get()->message(),
+    // Scheduler <---> EkosRemote connections
+    connect(schedulerModule(), &Ekos::Scheduler::jobsUpdated, ekosRemote.get()->message(),
+            &EkosRemote::Message::sendSchedulerJobs, Qt::UniqueConnection);
+    connect(schedulerModule(), &Ekos::Scheduler::settingsUpdated, ekosRemote.get()->message(),
+            &EkosRemote::Message::sendSchedulerSettings, Qt::UniqueConnection);
+    connect(schedulerModule()->process().data(), &SchedulerProcess::newLog, ekosRemote.get()->message(),
             [this]()
     {
         QJsonObject cStatus =
@@ -414,9 +414,9 @@ Manager::Manager(QWidget * parent) : QDialog(parent), m_networkManager(this)
             {"log", schedulerModule()->moduleState()->getLogText()}
         };
 
-        ekosLiveClient.get()->message()->sendSchedulerStatus(cStatus);
+        ekosRemote.get()->message()->sendSchedulerStatus(cStatus);
     });
-    connect(schedulerModule(), &Ekos::Scheduler::newStatus, ekosLiveClient.get()->message(),
+    connect(schedulerModule(), &Ekos::Scheduler::newStatus, ekosRemote.get()->message(),
             [this](Ekos::SchedulerState state)
     {
         QJsonObject cStatus =
@@ -424,7 +424,7 @@ Manager::Manager(QWidget * parent) : QDialog(parent), m_networkManager(this)
             {"status", state}
         };
 
-        ekosLiveClient.get()->message()->sendSchedulerStatus(cStatus);
+        ekosRemote.get()->message()->sendSchedulerStatus(cStatus);
     });
 
     // Initialize Ekos Analyze Module
@@ -1152,7 +1152,7 @@ void Manager::start()
     if (jsonError.error == QJsonParseError::NoError)
         profileScripts = doc.array();
 
-    ekosLiveClient->message()->setPendingPropertiesEnabled(true);
+    ekosRemote->message()->setPendingPropertiesEnabled(true);
 
     // For locally running INDI server
     if (m_LocalMode)
@@ -1779,7 +1779,7 @@ void Manager::cleanDevices(bool stopDrivers)
     if (mountModule())
         mountModule()->stopTimers();
 
-    ekosLiveClient->message()->setPendingPropertiesEnabled(false);
+    ekosRemote->message()->setPendingPropertiesEnabled(false);
 
     INDIListener::Instance()->disconnect(this);
     DriverManager::Instance()->disconnect(this);
@@ -1969,7 +1969,7 @@ void Manager::deviceDisconnected()
 
 void Manager::addMount(ISD::Mount *device)
 {
-    ekosLiveClient->message()->sendScopes();
+    ekosRemote->message()->sendScopes();
 
     appendLogText(i18n("%1 is online.", device->getDeviceName()));
 
@@ -1978,7 +1978,7 @@ void Manager::addMount(ISD::Mount *device)
 
 void Manager::addCamera(ISD::Camera * device)
 {
-    ekosLiveClient.get()->media()->registerCameras();
+    ekosRemote.get()->media()->registerCameras();
 
     appendLogText(i18n("%1 is online.", device->getDeviceName()));
 
@@ -2207,7 +2207,7 @@ void Manager::removeDevice(const QSharedPointer<ISD::GenericDevice> &device)
 
 void Manager::processDeleteProperty(INDI::Property prop)
 {
-    ekosLiveClient.get()->message()->processDeleteProperty(prop);
+    ekosRemote.get()->message()->processDeleteProperty(prop);
 }
 
 void Manager::processMessage(const QString &message)
@@ -2220,12 +2220,12 @@ void Manager::processMessage(const QString &message)
     if (!INDIListener::findDevice(origin->getDeviceName(), device))
         return;
 
-    ekosLiveClient.get()->message()->processMessage(device, message);
+    ekosRemote.get()->message()->processMessage(device, message);
 }
 
 void Manager::processUpdateProperty(INDI::Property prop)
 {
-    ekosLiveClient.get()->message()->processUpdateProperty(prop);
+    ekosRemote.get()->message()->processUpdateProperty(prop);
 
     if (prop.isNameMatch("CCD_INFO") ||
             prop.isNameMatch("GUIDER_INFO") ||
@@ -2253,7 +2253,7 @@ void Manager::processNewProperty(INDI::Property prop)
 
     settleTimer.start();
 
-    ekosLiveClient.get()->message()->processNewProperty(prop);
+    ekosRemote.get()->message()->processNewProperty(prop);
 
     if (prop.isNameMatch("DEVICE_PORT_SCAN") || prop.isNameMatch("CONNECTION_TYPE"))
     {
@@ -2462,7 +2462,7 @@ void Manager::initCapture()
             {"log", captureModule()->getLogText()}
         };
 
-        ekosLiveClient.get()->message()->updateCaptureStatus(cStatus);
+        ekosRemote.get()->message()->updateCaptureStatus(cStatus);
     });
     connect(captureModule(), &Ekos::Capture::newStatus, this, &Ekos::Manager::updateCaptureStatus);
     connect(captureModule(), &Ekos::Capture::newImage, this, &Ekos::Manager::updateCaptureProgress);
@@ -2505,7 +2505,7 @@ void Manager::initAlign()
             {"log", alignModule()->getLogText()}
         };
 
-        ekosLiveClient.get()->message()->updateAlignStatus(cStatus);
+        ekosRemote.get()->message()->updateAlignStatus(cStatus);
     });
     connect(alignModule(), &Ekos::Align::newDownloadProgress, this, [this](QString info)
     {
@@ -2514,7 +2514,7 @@ void Manager::initAlign()
             {"downloadProgress", info}
         };
 
-        ekosLiveClient.get()->message()->updateAlignStatus(cStatus);
+        ekosRemote.get()->message()->updateAlignStatus(cStatus);
     });
     if (Options::ekosLeftIcons())
     {
@@ -2558,7 +2558,7 @@ void Manager::initFocus()
             {"log", focusModule()->getLogText()}
         };
 
-        ekosLiveClient.get()->message()->updateFocusStatus(cStatus);
+        ekosRemote.get()->message()->updateFocusStatus(cStatus);
     });
     connect(focusModule()->mainFocuser().get(), &Ekos::Focus::newFocusAdvisorMessage, this, [this](const QString & message)
     {
@@ -2567,9 +2567,9 @@ void Manager::initFocus()
             {"focusAdvisorMessage", message}
         };
 
-        ekosLiveClient.get()->message()->updateFocusStatus(cStatus);
+        ekosRemote.get()->message()->updateFocusStatus(cStatus);
     });
-    connect(focusModule()->mainFocuser().get(), &Ekos::Focus::newFocusAdvisorStage, ekosLiveClient.get()->message(),
+    connect(focusModule()->mainFocuser().get(), &Ekos::Focus::newFocusAdvisorStage, ekosRemote.get()->message(),
             [this](int stage)
     {
         QJsonObject cStatus =
@@ -2577,7 +2577,7 @@ void Manager::initFocus()
             {"focusAdvisorStage", stage}
         };
 
-        ekosLiveClient.get()->message()->updateFocusStatus(cStatus);
+        ekosRemote.get()->message()->updateFocusStatus(cStatus);
     });
 
 
@@ -2592,7 +2592,7 @@ void Manager::initFocus()
             {"focusinitHFRPlot", true}
         };
 
-        ekosLiveClient.get()->message()->updateFocusStatus(cStatus);
+        ekosRemote.get()->message()->updateFocusStatus(cStatus);
     });
 
     // Update title
@@ -2604,7 +2604,7 @@ void Manager::initFocus()
             {"title", title}
         };
 
-        ekosLiveClient.get()->message()->updateFocusStatus(cStatus);
+        ekosRemote.get()->message()->updateFocusStatus(cStatus);
     });
     connect(focusModule()->mainFocuser().get(), &Ekos::Focus::setTitle, focusProgressWidget->hfrVPlot,
             &FocusHFRVPlot::setTitle);
@@ -2659,7 +2659,7 @@ void Manager::updateCurrentHFR(double newHFR, int position, bool inAutofocus)
         {"pos", position}
     };
 
-    ekosLiveClient.get()->message()->updateFocusStatus(cStatus);
+    ekosRemote.get()->message()->updateFocusStatus(cStatus);
 }
 
 void Manager::updateSigmas(double ra, double de)
@@ -2668,7 +2668,7 @@ void Manager::updateSigmas(double ra, double de)
 
     QJsonObject cStatus = { {"rarms", ra}, {"derms", de} };
 
-    ekosLiveClient.get()->message()->updateGuideStatus(cStatus);
+    ekosRemote.get()->message()->updateGuideStatus(cStatus);
 }
 
 void Manager::initMount()
@@ -2696,12 +2696,12 @@ void Manager::initMount()
     });
     connect(mountModule(), &Ekos::Mount::pierSideChanged, this, [&](ISD::Mount::PierSide side)
     {
-        ekosLiveClient.get()->message()->updateMountStatus(QJsonObject({{"pierSide", side}}));
+        ekosRemote.get()->message()->updateMountStatus(QJsonObject({{"pierSide", side}}));
     });
     connect(mountModule()->getMeridianFlipState().get(),
             &Ekos::MeridianFlipState::newMountMFStatus, [&](MeridianFlipState::MeridianFlipMountState status)
     {
-        ekosLiveClient.get()->message()->updateMountStatus(QJsonObject(
+        ekosRemote.get()->message()->updateMountStatus(QJsonObject(
         {
             {"meridianFlipStatus", status},
         }));
@@ -2710,7 +2710,7 @@ void Manager::initMount()
             &Ekos::MeridianFlipState::newMeridianFlipMountStatusText, [&](const QString & text)
     {
         // Throttle this down
-        ekosLiveClient.get()->message()->updateMountStatus(QJsonObject(
+        ekosRemote.get()->message()->updateMountStatus(QJsonObject(
         {
             {"meridianFlipText", text},
         }), mountModule()->getMeridianFlipState()->getMeridianFlipMountState() == MeridianFlipState::MOUNT_FLIP_NONE);
@@ -2718,16 +2718,16 @@ void Manager::initMount()
     });
     connect(mountModule(), &Ekos::Mount::autoParkCountdownUpdated, this, [&](const QString & text)
     {
-        ekosLiveClient.get()->message()->updateMountStatus(QJsonObject({{"autoParkCountdown", text}}), true);
+        ekosRemote.get()->message()->updateMountStatus(QJsonObject({{"autoParkCountdown", text}}), true);
     });
 
-    connect(mountModule(), &Ekos::Mount::trainChanged, ekosLiveClient.get()->message(),
-            &EkosLive::Message::sendTrainProfiles, Qt::UniqueConnection);
+    connect(mountModule(), &Ekos::Mount::trainChanged, ekosRemote.get()->message(),
+            &EkosRemote::Message::sendTrainProfiles, Qt::UniqueConnection);
 
     connect(mountModule(), &Ekos::Mount::slewRateChanged, this, [&](int slewRate)
     {
         QJsonObject status = { { "slewRate", slewRate} };
-        ekosLiveClient.get()->message()->updateMountStatus(status);
+        ekosRemote.get()->message()->updateMountStatus(status);
     });
 
     if (Options::ekosLeftIcons())
@@ -2773,9 +2773,9 @@ void Manager::initGuide()
         connect(guideModule(), &Ekos::Guide::newAxisDelta, [&](double ra, double de)
         {
             QJsonObject status = { { "drift_ra", ra}, {"drift_de", de} };
-            ekosLiveClient.get()->message()->updateGuideStatus(status);
+            ekosRemote.get()->message()->updateGuideStatus(status);
         });
-        connect(guideModule(), &Ekos::Guide::newLog, ekosLiveClient.get()->message(),
+        connect(guideModule(), &Ekos::Guide::newLog, ekosRemote.get()->message(),
                 [this]()
         {
             QJsonObject cStatus =
@@ -2783,7 +2783,7 @@ void Manager::initGuide()
                 {"log", guideModule()->getLogText()}
             };
 
-            ekosLiveClient.get()->message()->updateGuideStatus(cStatus);
+            ekosRemote.get()->message()->updateGuideStatus(cStatus);
         });
 
         if (Options::ekosLeftIcons())
@@ -3168,7 +3168,7 @@ void Manager::updateMountStatus(ISD::Mount::Status status)
         {"status", mountModule()->statusString(false)}
     };
 
-    ekosLiveClient.get()->message()->updateMountStatus(cStatus);
+    ekosRemote.get()->message()->updateMountStatus(cStatus);
 }
 
 void Manager::updateMountCoords(const SkyPoint position, ISD::Mount::PierSide pierSide, const dms &ha)
@@ -3190,7 +3190,7 @@ void Manager::updateMountCoords(const SkyPoint position, ISD::Mount::PierSide pi
         {"ha", ha.Degrees()},
     };
 
-    ekosLiveClient.get()->message()->updateMountStatus(cStatus, true);
+    ekosRemote.get()->message()->updateMountStatus(cStatus, true);
 }
 
 void Manager::updateCaptureStatus(Ekos::CaptureState status, const QString &trainname)
@@ -3221,7 +3221,7 @@ void Manager::updateCaptureStatus(Ekos::CaptureState status, const QString &trai
         {"train", trainname}
     };
 
-    ekosLiveClient.get()->message()->updateCaptureStatus(cStatus);
+    ekosRemote.get()->message()->updateCaptureStatus(cStatus);
 }
 
 void Manager::updateCaptureProgress(const QSharedPointer<SequenceJob> &job, const QSharedPointer<FITSData> &data,
@@ -3236,17 +3236,14 @@ void Manager::updateCaptureProgress(const QSharedPointer<SequenceJob> &job, cons
         {"seql", capturePreview->captureCountsWidget->sequenceRemainingTime->text()}
     };
 
-    ekosLiveClient.get()->message()->updateCaptureStatus(status);
+    ekosRemote.get()->message()->updateCaptureStatus(status);
 
     if (data && job->getStatus() == JOB_BUSY)
     {
         // Normally FITS Viewer would trigger an upload
         // If off, then rely on summary view or raw data
         if (Options::useFITSViewer() == false)
-            ekosLiveClient.get()->media()->sendData(data, data->objectName());
-
-        if (job->jobType() != SequenceJob::JOBTYPE_PREVIEW)
-            ekosLiveClient.get()->cloud()->sendData(data, data->objectName());
+            ekosRemote.get()->media()->sendData(data, data->objectName());
     }
 }
 
@@ -3259,7 +3256,7 @@ void Manager::updateExposureProgress(const QSharedPointer<SequenceJob> &job, con
         {"train", trainname}
     };
 
-    ekosLiveClient.get()->message()->updateCaptureStatus(status);
+    ekosRemote.get()->message()->updateCaptureStatus(status);
 }
 
 void Manager::updateCaptureCountDown()
@@ -3274,7 +3271,7 @@ void Manager::updateCaptureCountDown()
         {"ovl", capturePreview->captureCountsWidget->gr_overallLabel->text()}
     };
 
-    ekosLiveClient.get()->message()->updateCaptureStatus(status);
+    ekosRemote.get()->message()->updateCaptureStatus(status);
 }
 
 
@@ -3287,7 +3284,7 @@ void Manager::updateFocusStatus(Ekos::FocusState status)
         {"status", getFocusStatusString(status, false)}
     };
 
-    ekosLiveClient.get()->message()->updateFocusStatus(cStatus);
+    ekosRemote.get()->message()->updateFocusStatus(cStatus);
 }
 
 void Manager::updateGuideStatus(Ekos::GuideState status)
@@ -3298,7 +3295,7 @@ void Manager::updateGuideStatus(Ekos::GuideState status)
         {"status", getGuideStatusString(status, false)}
     };
 
-    ekosLiveClient.get()->message()->updateGuideStatus(cStatus);
+    ekosRemote.get()->message()->updateGuideStatus(cStatus);
 }
 
 void Manager::setTarget(const QString &name)
@@ -3306,7 +3303,7 @@ void Manager::setTarget(const QString &name)
     capturePreview->targetLabel->setVisible(!name.isEmpty());
     capturePreview->mountTarget->setVisible(!name.isEmpty());
     capturePreview->mountTarget->setText(name);
-    ekosLiveClient.get()->message()->updateMountStatus(QJsonObject({{"target", name}}));
+    ekosRemote.get()->message()->updateMountStatus(QJsonObject({{"target", name}}));
     // forward it to the mount tab
     if (mountModule())
         mountModule()->setTargetName(name);
@@ -3474,20 +3471,20 @@ void Manager::watchDebugProperty(INDI::Property prop)
 
 void Manager::announceEvent(const QString &message, KSNotification::EventSource source, KSNotification::EventType event)
 {
-    ekosLiveClient.get()->message()->sendEvent(message, source, event);
+    ekosRemote.get()->message()->sendEvent(message, source, event);
 }
 
 void Manager::connectModules()
 {
     // Dark Library
-    connect(DarkLibrary::Instance(), &DarkLibrary::newImage, ekosLiveClient.get()->media(),
-            &EkosLive::Media::sendDarkLibraryData, Qt::UniqueConnection);
-    connect(DarkLibrary::Instance(), &DarkLibrary::trainChanged, ekosLiveClient.get()->message(),
-            &EkosLive::Message::sendTrainProfiles, Qt::UniqueConnection);
-    connect(DarkLibrary::Instance(), &DarkLibrary::newFrame, ekosLiveClient.get()->media(), &EkosLive::Media::sendModuleFrame,
+    connect(DarkLibrary::Instance(), &DarkLibrary::newImage, ekosRemote.get()->media(),
+            &EkosRemote::Media::sendDarkLibraryData, Qt::UniqueConnection);
+    connect(DarkLibrary::Instance(), &DarkLibrary::trainChanged, ekosRemote.get()->message(),
+            &EkosRemote::Message::sendTrainProfiles, Qt::UniqueConnection);
+    connect(DarkLibrary::Instance(), &DarkLibrary::newFrame, ekosRemote.get()->media(), &EkosRemote::Media::sendModuleFrame,
             Qt::UniqueConnection);
-    connect(DarkLibrary::Instance(), &DarkLibrary::settingsUpdated, ekosLiveClient.get()->message(),
-            &EkosLive::Message::sendGuideSettings, Qt::UniqueConnection);
+    connect(DarkLibrary::Instance(), &DarkLibrary::settingsUpdated, ekosRemote.get()->message(),
+            &EkosRemote::Message::sendGuideSettings, Qt::UniqueConnection);
 
     // Guide <---> Capture connections
     if (captureProcess && guideProcess)
@@ -3621,30 +3618,30 @@ void Manager::connectModules()
                 Qt::UniqueConnection);
     }
 
-    // Optical Train Manager ---> EkosLive connections
-    if (ekosLiveClient)
+    // Optical Train Manager ---> EkosRemote connections
+    if (ekosRemote)
     {
-        connect(OpticalTrainManager::Instance(), &OpticalTrainManager::updated, ekosLiveClient->message(),
-                &EkosLive::Message::sendTrains, Qt::UniqueConnection);
-        connect(OpticalTrainManager::Instance(), &OpticalTrainManager::configurationRequested, ekosLiveClient->message(),
-                &EkosLive::Message::requestOpticalTrains, Qt::UniqueConnection);
+        connect(OpticalTrainManager::Instance(), &OpticalTrainManager::updated, ekosRemote->message(),
+                &EkosRemote::Message::sendTrains, Qt::UniqueConnection);
+        connect(OpticalTrainManager::Instance(), &OpticalTrainManager::configurationRequested, ekosRemote->message(),
+                &EkosRemote::Message::requestOpticalTrains, Qt::UniqueConnection);
     }
 
-    // Capture <---> EkosLive connections
-    if (captureProcess && ekosLiveClient)
+    // Capture <---> EkosRemote connections
+    if (captureProcess && ekosRemote)
     {
-        //captureProcess.get()->disconnect(ekosLiveClient.get()->message());
+        //captureProcess.get()->disconnect(ekosRemote.get()->message());
 
-        connect(captureModule(), &Ekos::Capture::dslrInfoRequested, ekosLiveClient.get()->message(),
-                &EkosLive::Message::requestDSLRInfo, Qt::UniqueConnection);
-        connect(captureModule(), &Ekos::Capture::sequenceChanged, ekosLiveClient.get()->message(),
-                &EkosLive::Message::sendCaptureSequence, Qt::UniqueConnection);
-        connect(captureModule(), &Ekos::Capture::settingsUpdated, ekosLiveClient.get()->message(),
-                &EkosLive::Message::sendCaptureSettings, Qt::UniqueConnection);
-        connect(captureModule(), &Ekos::Capture::newLocalPreview, ekosLiveClient.get()->message(),
-                &EkosLive::Message::sendPreviewLabel, Qt::UniqueConnection);
-        connect(captureModule(), &Ekos::Capture::trainChanged, ekosLiveClient.get()->message(),
-                &EkosLive::Message::sendTrainProfiles, Qt::UniqueConnection);
+        connect(captureModule(), &Ekos::Capture::dslrInfoRequested, ekosRemote.get()->message(),
+                &EkosRemote::Message::requestDSLRInfo, Qt::UniqueConnection);
+        connect(captureModule(), &Ekos::Capture::sequenceChanged, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendCaptureSequence, Qt::UniqueConnection);
+        connect(captureModule(), &Ekos::Capture::settingsUpdated, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendCaptureSettings, Qt::UniqueConnection);
+        connect(captureModule(), &Ekos::Capture::newLocalPreview, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendPreviewLabel, Qt::UniqueConnection);
+        connect(captureModule(), &Ekos::Capture::trainChanged, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendTrainProfiles, Qt::UniqueConnection);
     }
 
     // Focus <---> Align connections
@@ -3681,78 +3678,78 @@ void Manager::connectModules()
                 Qt::UniqueConnection);
     }
 
-    // Align <--> EkosLive connections
-    if (alignProcess && ekosLiveClient)
+    // Align <--> EkosRemote connections
+    if (alignProcess && ekosRemote)
     {
-        //        alignProcess.get()->disconnect(ekosLiveClient.get()->message());
-        //        alignProcess.get()->disconnect(ekosLiveClient.get()->media());
+        //        alignProcess.get()->disconnect(ekosRemote.get()->message());
+        //        alignProcess.get()->disconnect(ekosRemote.get()->media());
 
-        connect(alignModule(), &Ekos::Align::newStatus, ekosLiveClient.get()->message(), &EkosLive::Message::setAlignStatus,
+        connect(alignModule(), &Ekos::Align::newStatus, ekosRemote.get()->message(), &EkosRemote::Message::setAlignStatus,
                 Qt::UniqueConnection);
-        connect(alignModule(), &Ekos::Align::newSolution, ekosLiveClient.get()->message(),
-                &EkosLive::Message::setAlignSolution, Qt::UniqueConnection);
+        connect(alignModule(), &Ekos::Align::newSolution, ekosRemote.get()->message(),
+                &EkosRemote::Message::setAlignSolution, Qt::UniqueConnection);
         connect(alignModule()->polarAlignmentAssistant(), &Ekos::PolarAlignmentAssistant::newPAHStage,
-                ekosLiveClient.get()->message(), &EkosLive::Message::setPAHStage,
+                ekosRemote.get()->message(), &EkosRemote::Message::setPAHStage,
                 Qt::UniqueConnection);
         connect(alignModule()->polarAlignmentAssistant(), &Ekos::PolarAlignmentAssistant::newPAHMessage,
-                ekosLiveClient.get()->message(),
-                &EkosLive::Message::setPAHMessage, Qt::UniqueConnection);
+                ekosRemote.get()->message(),
+                &EkosRemote::Message::setPAHMessage, Qt::UniqueConnection);
         connect(alignModule()->polarAlignmentAssistant(), &Ekos::PolarAlignmentAssistant::PAHEnabled,
-                ekosLiveClient.get()->message(), &EkosLive::Message::setPAHEnabled,
+                ekosRemote.get()->message(), &EkosRemote::Message::setPAHEnabled,
                 Qt::UniqueConnection);
         connect(alignModule()->polarAlignmentAssistant(), &Ekos::PolarAlignmentAssistant::polarResultUpdated,
-                ekosLiveClient.get()->message(),
-                &EkosLive::Message::setPolarResults, Qt::UniqueConnection);
+                ekosRemote.get()->message(),
+                &EkosRemote::Message::setPolarResults, Qt::UniqueConnection);
         connect(alignModule()->polarAlignmentAssistant(), &Ekos::PolarAlignmentAssistant::updatedErrorsChanged,
-                ekosLiveClient.get()->message(),
-                &EkosLive::Message::setUpdatedErrors, Qt::UniqueConnection);
+                ekosRemote.get()->message(),
+                &EkosRemote::Message::setUpdatedErrors, Qt::UniqueConnection);
         connect(alignModule()->polarAlignmentAssistant(), &Ekos::PolarAlignmentAssistant::newCorrectionVector,
-                ekosLiveClient.get()->media(),
-                &EkosLive::Media::setCorrectionVector, Qt::UniqueConnection);
+                ekosRemote.get()->media(),
+                &EkosRemote::Media::setCorrectionVector, Qt::UniqueConnection);
 
-        connect(alignModule(), &Ekos::Align::newImage, ekosLiveClient.get()->media(), &EkosLive::Media::sendModuleFrame,
+        connect(alignModule(), &Ekos::Align::newImage, ekosRemote.get()->media(), &EkosRemote::Media::sendModuleFrame,
                 Qt::UniqueConnection);
-        connect(alignModule(), &Ekos::Align::newFrame, ekosLiveClient.get()->media(), &EkosLive::Media::sendUpdatedFrame,
+        connect(alignModule(), &Ekos::Align::newFrame, ekosRemote.get()->media(), &EkosRemote::Media::sendUpdatedFrame,
                 Qt::UniqueConnection);
 
-        connect(alignModule(), &Ekos::Align::settingsUpdated, ekosLiveClient.get()->message(),
-                &EkosLive::Message::sendAlignSettings, Qt::UniqueConnection);
+        connect(alignModule(), &Ekos::Align::settingsUpdated, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendAlignSettings, Qt::UniqueConnection);
 
-        connect(alignModule(), &Ekos::Align::trainChanged, ekosLiveClient.get()->message(),
-                &EkosLive::Message::sendTrainProfiles, Qt::UniqueConnection);
+        connect(alignModule(), &Ekos::Align::trainChanged, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendTrainProfiles, Qt::UniqueConnection);
 
-        connect(alignModule(), &Ekos::Align::manualRotatorChanged, ekosLiveClient.get()->message(),
-                &EkosLive::Message::sendManualRotatorStatus, Qt::UniqueConnection);
+        connect(alignModule(), &Ekos::Align::manualRotatorChanged, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendManualRotatorStatus, Qt::UniqueConnection);
     }
 
-    // Focus <--> EkosLive Connections
-    if (focusProcess && ekosLiveClient)
+    // Focus <--> EkosRemote Connections
+    if (focusProcess && ekosRemote)
     {
-        connect(focusModule()->mainFocuser().get(), &Ekos::Focus::settingsUpdated, ekosLiveClient.get()->message(),
-                &EkosLive::Message::sendFocusSettings, Qt::UniqueConnection);
+        connect(focusModule()->mainFocuser().get(), &Ekos::Focus::settingsUpdated, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendFocusSettings, Qt::UniqueConnection);
 
-        connect(focusModule()->mainFocuser().get(), &Ekos::Focus::newImage, ekosLiveClient.get()->media(),
-                &EkosLive::Media::sendModuleFrame,
+        connect(focusModule()->mainFocuser().get(), &Ekos::Focus::newImage, ekosRemote.get()->media(),
+                &EkosRemote::Media::sendModuleFrame,
                 Qt::UniqueConnection);
 
-        connect(focusModule()->mainFocuser().get(), &Ekos::Focus::trainChanged, ekosLiveClient.get()->message(),
-                &EkosLive::Message::sendTrainProfiles,
+        connect(focusModule()->mainFocuser().get(), &Ekos::Focus::trainChanged, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendTrainProfiles,
                 Qt::UniqueConnection);
 
         connect(focusModule()->mainFocuser().get(), &Ekos::Focus::autofocusAborted,
-                ekosLiveClient.get()->message(), &EkosLive::Message::autofocusAborted, Qt::UniqueConnection);
+                ekosRemote.get()->message(), &EkosRemote::Message::autofocusAborted, Qt::UniqueConnection);
     }
 
-    // Guide <--> EkosLive Connections
-    if (guideProcess && ekosLiveClient)
+    // Guide <--> EkosRemote Connections
+    if (guideProcess && ekosRemote)
     {
-        connect(guideModule(), &Ekos::Guide::settingsUpdated, ekosLiveClient.get()->message(),
-                &EkosLive::Message::sendGuideSettings, Qt::UniqueConnection);
+        connect(guideModule(), &Ekos::Guide::settingsUpdated, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendGuideSettings, Qt::UniqueConnection);
 
-        connect(guideModule(), &Ekos::Guide::trainChanged, ekosLiveClient.get()->message(),
-                &EkosLive::Message::sendTrainProfiles, Qt::UniqueConnection);
+        connect(guideModule(), &Ekos::Guide::trainChanged, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendTrainProfiles, Qt::UniqueConnection);
 
-        connect(guideModule(), &Ekos::Guide::newImage, ekosLiveClient.get()->media(), &EkosLive::Media::sendModuleFrame,
+        connect(guideModule(), &Ekos::Guide::newImage, ekosRemote.get()->media(), &EkosRemote::Media::sendModuleFrame,
                 Qt::UniqueConnection);
     }
 
@@ -3832,24 +3829,9 @@ void Manager::connectModules()
     }
 }
 
-void Manager::setEkosLiveConnected(bool enabled)
+bool Manager::ekosRemoteStatus()
 {
-    ekosLiveClient.get()->setConnected(enabled);
-}
-
-void Manager::setEkosLiveConfig(bool rememberCredentials, bool autoConnect)
-{
-    ekosLiveClient.get()->setConfig(rememberCredentials, autoConnect);
-}
-
-void Manager::setEkosLiveUser(const QString &username, const QString &password)
-{
-    ekosLiveClient.get()->setUser(username, password);
-}
-
-bool Manager::ekosLiveStatus()
-{
-    return ekosLiveClient.get()->isConnected();
+    return ekosRemote.get()->isConnected();
 }
 
 bool Manager::checkUniqueBinaryDriver(const QSharedPointer<DriverInfo> &primaryDriver,

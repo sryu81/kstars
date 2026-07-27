@@ -44,7 +44,7 @@
 #include <QUuid>
 #include <thread>
 
-namespace EkosLive
+namespace EkosRemote
 {
 Message::Message(Ekos::Manager *manager, QVector<QSharedPointer<NodeManager >> &nodeManagers):
     m_Manager(manager), m_NodeManagers(nodeManagers), m_DSOManager(CatalogsDB::dso_db_path())
@@ -152,7 +152,7 @@ void Message::onTextReceived(const QString &message)
         // If client is connected, make sure clock is ticking
         if (payload["state"].toBool(false))
         {
-            qCInfo(KSTARS_EKOS) << "EkosLive client is connected:" << node->url().toDisplayString();
+            qCInfo(KSTARS_EKOS) << "EkosRemote client is connected:" << node->url().toDisplayString();
 
             // Need to update client state in the matching node manager.
             for (auto &nodeManager : m_NodeManagers)
@@ -178,7 +178,7 @@ void Message::onTextReceived(const QString &message)
         // then we pause here as well to save power.
         else
         {
-            qCInfo(KSTARS_EKOS) << "EkosLive client is disconnected:" << node->url().toDisplayString();
+            qCInfo(KSTARS_EKOS) << "EkosRemote client is disconnected:" << node->url().toDisplayString();
 
             // Need to update client state in the matching node manager.
             for (auto &nodeManager : m_NodeManagers)
@@ -2711,7 +2711,7 @@ void Message::sendStates()
 ///////////////////////////////////////////////////////////////////////////////////////////
 void Message::sendEvent(const QString &message, KSNotification::EventSource source, KSNotification::EventType event)
 {
-    if (Options::ekosLiveNotifications() == false)
+    if (Options::ekosRemoteNotifications() == false)
         return;
 
     QJsonObject newEvent =
@@ -2788,7 +2788,7 @@ void Message::processDeleteProperty(INDI::Property prop)
 void Message::processMessage(const QSharedPointer<ISD::GenericDevice> &device, const QString &message)
 {
 
-    if (Options::ekosLiveNotifications() == false)
+    if (Options::ekosRemoteNotifications() == false)
         return;
 
     // Message text was already extracted safely in GenericDevice::processMessage.
@@ -3282,8 +3282,8 @@ void Message::processLiveStackerCommands(const QString &command, const QJsonObje
         if (!masterFlat.isEmpty())
             params.masterFlat = QVector<QString> {masterFlat};
 
-        // EkosLive integration: output directory where stacked images are saved to disk.
-        // This is DIFFERENT from stackingDirectory (input) - the EkosLive server monitors
+        // EkosRemote integration: output directory where stacked images are saved to disk.
+        // This is DIFFERENT from stackingDirectory (input) - the EkosRemote server monitors
         // this outputDirectory offline for new stacked frames.
         params.outputDirectory = m_LiveStackerSettings.value("outputDirectory").toString();
 
@@ -3458,7 +3458,7 @@ void Message::saveLiveStackerFrame(const QSharedPointer<Ekos::SequenceJob> &job,
 /// monitoring. If either changed (i.e. a new sequence job started), the stacker is
 /// stopped, its input directory is updated to the new job's actual save path (derived
 /// from SJ_Signature), and then the stacker is restarted. The output directory remains
-/// unchanged so the EkosLive server-side PictureMonitor keeps watching without any
+/// unchanged so the EkosRemote server-side PictureMonitor keeps watching without any
 /// server-side changes.
 ///////////////////////////////////////////////////////////////////////////////////////////
 void Message::onLiveStackerJobChanged(const QSharedPointer<Ekos::SequenceJob> &job,
@@ -3536,7 +3536,7 @@ void Message::onLiveStackerJobChanged(const QSharedPointer<Ekos::SequenceJob> &j
     if (!masterFlat.isEmpty())
         params.masterFlat = QVector<QString> {masterFlat};
 
-    // The output directory stays the same — the EkosLive server continues
+    // The output directory stays the same — the EkosRemote server continues
     // watching it for new stacked frames without requiring any server restart.
     params.outputDirectory = m_LiveStackerSettings.value("outputDirectory").toString();
 

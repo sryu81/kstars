@@ -8,7 +8,7 @@
         <annotation name="org.qtproject.QtDBus.QtTypeName" value="Ekos::CommunicationStatus"/>
     </property>
     <property name="settleStatus" type="u" access="read"/>
-    <property name="ekosLiveStatus" type="b" access="read"/>
+    <property name="ekosRemoteStatus" type="b" access="read"/>
     <property name="extensionStatus" type="i" access="read"/>
     <property name="logText" type="as" access="read"/>
     <method name="connectDevices">
@@ -46,17 +46,6 @@
       <arg name="name" type="s" direction="in"/>
       <arg type="s" direction="out"/>
     </method>
-    <method name="setEkosLiveConnected">
-        <arg name="enabled" type="b" direction="in"/>
-    </method>
-    <method name="setEkosLiveConfig">
-        <arg name="rememberCredentials" type="b" direction="in"/>
-        <arg name="autoConnect" type="b" direction="in"/>
-    </method>
-    <method name="setEkosLiveUser">
-        <arg name="username" type="s" direction="in"/>
-        <arg name="password" type="s" direction="in"/>
-    </method>
     <method name="setEkosLoggingEnabled">
         <arg name="name" type="s" direction="in"/>
         <arg name="enabled" type="b" direction="in"/>
@@ -82,7 +71,7 @@
         <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="Ekos::CommunicationStatus"/>
         <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="Ekos::CommunicationStatus"/>
     </signal>
-    <signal name="ekosLiveStatusChanged">
+    <signal name="ekosRemoteStatusChanged">
         <arg name="status" type="b" direction="out"/>
     </signal>
     <signal name="extensionStatusChanged">

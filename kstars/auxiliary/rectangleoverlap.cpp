@@ -9,6 +9,7 @@
 
 #include "rectangleoverlap.h"
 #include "math.h"
+#include <limits>
 
 namespace
 {

@@ -30,9 +30,9 @@
 #include <memory>
 
 //! Generic record interfaces and implementations.
-namespace EkosLive
+namespace EkosRemote
 {
-class Client;
+class Server;
 class Message;
 class Media;
 }
@@ -84,7 +84,7 @@ class Manager : public QDialog, public Ui::Manager
         Q_SCRIPTABLE Q_PROPERTY(Ekos::CommunicationStatus indiStatus READ indiStatus NOTIFY indiStatusChanged)
         Q_SCRIPTABLE Q_PROPERTY(Ekos::CommunicationStatus ekosStatus READ ekosStatus NOTIFY ekosStatusChanged)
         Q_SCRIPTABLE Q_PROPERTY(Ekos::CommunicationStatus settleStatus READ settleStatus NOTIFY settleStatusChanged)
-        Q_SCRIPTABLE Q_PROPERTY(bool ekosLiveStatus READ ekosLiveStatus NOTIFY ekosLiveStatusChanged)
+        Q_SCRIPTABLE Q_PROPERTY(bool ekosRemoteStatus READ ekosRemoteStatus NOTIFY ekosRemoteStatusChanged)
         Q_SCRIPTABLE Q_PROPERTY(Ekos::ExtensionState extensionStatus READ extensionStatus NOTIFY extensionStatusChanged)
         Q_SCRIPTABLE Q_PROPERTY(QStringList logText READ logText NOTIFY newLog)
 
@@ -355,7 +355,7 @@ class Manager : public QDialog, public Ui::Manager
             return m_LogText;
         }
 
-        Q_SCRIPTABLE bool ekosLiveStatus();
+        Q_SCRIPTABLE bool ekosRemoteStatus();
 
         /**
          * DBUS interface function.
@@ -367,26 +367,6 @@ class Manager : public QDialog, public Ui::Manager
         };
 
         /**
-         * DBUS interface function.
-         * @param enabled Connect to EkosLive if true, otherwise disconnect.
-        */
-        Q_SCRIPTABLE void setEkosLiveConnected(bool enabled);
-
-        /**
-         * @brief setEkosLiveConfig Set EkosLive settings
-         * @param rememberCredentials Remember username and password for next session.
-         * @param autoConnect If true, it will automatically connect to EkosLive service.
-         */
-        Q_SCRIPTABLE void setEkosLiveConfig(bool rememberCredentials, bool autoConnect);
-
-        /**
-         * @brief setEkosLiveUser Save EkosLive username and password
-         * @param username User name
-         * @param password Password
-         */
-        Q_SCRIPTABLE void setEkosLiveUser(const QString &username, const QString &password);
-
-        /**
          * @brief acceptPortSelection Accept current port selection settings in the Selector Dialog
          */
         Q_SCRIPTABLE void acceptPortSelection();
@@ -396,7 +376,7 @@ class Manager : public QDialog, public Ui::Manager
         void ekosStatusChanged(Ekos::CommunicationStatus status);
         void indiStatusChanged(Ekos::CommunicationStatus status);
         void settleStatusChanged(Ekos::CommunicationStatus status);
-        void ekosLiveStatusChanged(bool status);
+        void ekosRemoteStatusChanged(bool status);
         void extensionStatusChanged(bool = true);
 
         void newLog(const QString &text);
@@ -610,7 +590,7 @@ class Manager : public QDialog, public Ui::Manager
         std::unique_ptr<Analyze> analyzeProcess;
         std::unique_ptr<Scheduler> schedulerProcess;
         std::unique_ptr<Observatory> observatoryProcess;
-        std::unique_ptr<EkosLive::Client> ekosLiveClient;
+        std::unique_ptr<EkosRemote::Server> ekosRemote;
 
         bool m_LocalMode { true };
         bool m_isStarted { false };
@@ -667,9 +647,9 @@ class Manager : public QDialog, public Ui::Manager
         QSet<QString> m_syncedDevices;
         QSet<QString> m_ProfileManagedDevices;
 
-        friend class EkosLive::Client;
-        friend class EkosLive::Message;
-        friend class EkosLive::Media;
+        friend class EkosRemote::Server;
+        friend class EkosRemote::Message;
+        friend class EkosRemote::Media;
 
         static Manager *_Manager;
 };

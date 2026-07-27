@@ -16,7 +16,7 @@
 
 class FITSView;
 
-namespace EkosLive
+namespace EkosRemote
 {
 class Media : public QObject
 {

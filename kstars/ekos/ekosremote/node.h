@@ -12,7 +12,7 @@
 #include <QJsonObject>
 #include <memory>
 
-namespace EkosLive
+namespace EkosRemote
 {
 class Node : public QObject
 {
@@ -27,6 +27,11 @@ class Node : public QObject
         const QUrl url() const
         {
             return m_URL;
+        }
+
+        const QString &path() const
+        {
+            return m_Path;
         }
 
         void setClientState(bool value)
@@ -52,6 +57,12 @@ class Node : public QObject
             m_AuthResponse = response;
         }
 
+        // Adopt a socket already accepted by a QWebSocketServer (server-side path).
+        // Unlike connectServer(), the socket is already connected when handed over,
+        // so this drives the same state transition onConnected() would via the
+        // (already-fired) QWebSocket::connected signal, rather than waiting for it.
+        void adoptSocket(QWebSocket *socket);
+
     Q_SIGNALS:
         void connected();
         void disconnected();
@@ -69,7 +80,9 @@ class Node : public QObject
         void onError(QAbstractSocket::SocketError error);
 
     private:
-        QWebSocket m_WebSocket;
+        void wireSocket();
+
+        QWebSocket *m_WebSocket { nullptr };
         QJsonObject m_AuthResponse;
         uint16_t m_ReconnectTries {0};
         QUrl m_URL;

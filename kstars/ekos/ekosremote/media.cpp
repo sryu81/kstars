@@ -31,7 +31,7 @@
 #include <KFormat>
 #include <QImageWriter>
 
-namespace EkosLive
+namespace EkosRemote
 {
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -727,12 +727,10 @@ void Media::resetPolarView()
 
 void Media::uploadImage(const QByteArray &image, const QString &uuid)
 {
-    bool isPreviewImage = (uuid.isEmpty() || uuid[0] != '+');
-    bool shouldBypassClientStateCheck = isPreviewImage && Options::ekosLiveCloud();
-
+    Q_UNUSED(uuid)
     for (auto &nodeManager : m_NodeManagers)
     {
-        nodeManager->media()->sendBinaryMessage(image, shouldBypassClientStateCheck);
+        nodeManager->media()->sendBinaryMessage(image);
     }
 }
 

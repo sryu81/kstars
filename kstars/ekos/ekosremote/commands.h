@@ -10,7 +10,7 @@
 
 #include <QMap>
 
-namespace EkosLive
+namespace EkosRemote
 {
 enum COMMANDS
 {

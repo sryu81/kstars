@@ -378,7 +378,7 @@
                 </widget>
                </item>
                <item>
-                <widget class="QPushButton" name="ekosLiveB">
+                <widget class="QPushButton" name="ekosRemoteB">
                  <property name="enabled">
                   <bool>true</bool>
                  </property>
@@ -1129,7 +1129,7 @@
   <tabstop>deleteProfileB</tabstop>
   <tabstop>customDriversB</tabstop>
   <tabstop>wizardProfileB</tabstop>
-  <tabstop>ekosLiveB</tabstop>
+  <tabstop>ekosRemoteB</tabstop>
   <tabstop>optionsB</tabstop>
   <tabstop>ekosOptionsB</tabstop>
   <tabstop>clearB</tabstop>

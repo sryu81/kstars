@@ -204,7 +204,7 @@ if (INDI_FOUND)
             ekos/auxiliary/opticaltrains.ui
             ekos/auxiliary/ledstatuswidget.ui
             # Ekos Live
-            ekos/ekoslive/ekoslivedialog.ui
+            ekos/ekosremote/ekosremotedialog.ui
         )
         # Aberration Inspector
         if (Qt5DataVisualization_FOUND OR Qt6DataVisualization_FOUND)
@@ -423,12 +423,11 @@ if (INDI_FOUND)
 #            ekos/observatory/observatoryweathermodel.cpp
 
             # Ekos Live
-            ekos/ekoslive/ekosliveclient.cpp
-            ekos/ekoslive/message.cpp
-            ekos/ekoslive/media.cpp
-            ekos/ekoslive/cloud.cpp
-            ekos/ekoslive/node.cpp
-            ekos/ekoslive/nodemanager.cpp
+            ekos/ekosremote/ekosremoteserver.cpp
+            ekos/ekosremote/message.cpp
+            ekos/ekosremote/media.cpp
+            ekos/ekosremote/node.cpp
+            ekos/ekosremote/nodemanager.cpp
 
             # Tools
             tools/imagingplanner.cpp

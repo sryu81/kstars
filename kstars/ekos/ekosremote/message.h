@@ -19,7 +19,7 @@
 #include "nodemanager.h"
 #include <QQueue>
 
-namespace EkosLive
+namespace EkosRemote
 {
 class Message : public QObject
 {
