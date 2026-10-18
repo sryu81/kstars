@@ -478,6 +478,23 @@ void CameraState::updateMeridianFlipStage(const MeridianFlipState::MFStage &stag
 
         case MeridianFlipState::MF_COMPLETED:
 
+            // Flip completed while no capture job was active (e.g. mount-only flip, or between jobs):
+            // there is nothing to resume, so skip post-flip refocus/align/guide and return straight to
+            // MF_NONE. Otherwise the stage would stay at MF_COMPLETED (processFlipCompleted() never sees
+            // an idle capture state here, it was set to CAPTURE_MERIDIAN_FLIP at MOUNT_FLIP_RUNNING) and
+            // its pending actions would leak into the next job.
+            if (m_activeJob == nullptr)
+            {
+                qCDebug(KSTARS_EKOS_CAPTURE) << "Meridian flip completed with no active job, skipping post-flip actions.";
+                getMeridianFlipState()->processFlipCompleted();
+                resetAlignmentRetries();
+                setCaptureState(m_ContinueAction == CAPTURE_CONTINUE_ACTION_NONE ? CAPTURE_IDLE : CAPTURE_PAUSED);
+                // still announce the completion (followers are restarted on it), then reset the stage
+                Q_EMIT newMeridianFlipStage(stage);
+                updateMeridianFlipStage(MeridianFlipState::MF_NONE);
+                return;
+            }
+
             // Reset HFR Check counter after meridian flip
             if (getRefocusState()->isInSequenceFocus())
             {
@@ -724,6 +741,7 @@ void CameraState::updateAdaptiveFocusState(bool success)
 
 void CameraState::updateFocusState(FocusState state)
 {
+    const FocusState previousState = m_FocusState;
     if (state != m_FocusState)
         qCDebug(KSTARS_EKOS_CAPTURE) << "Focus State changed from" <<
                                      Ekos::getFocusStatusString(m_FocusState) <<
@@ -738,6 +756,16 @@ void CameraState::updateFocusState(FocusState state)
     {
         // Do not process when aborted
         case FOCUS_ABORTED:
+            // Only abort capture for an autofocus run that is still in progress for an active job.
+            // Repeated/late FOCUS_ABORTED signals (e.g. from the focuser moving back to its start
+            // position) would otherwise abort each capture the scheduler restarts and burn its
+            // capture failure attempts.
+            if (m_activeJob == nullptr || previousState == FOCUS_ABORTED || previousState == FOCUS_IDLE
+                    || previousState == FOCUS_COMPLETE || previousState == FOCUS_FAILED)
+            {
+                qCDebug(KSTARS_EKOS_CAPTURE) << "Ignoring focus abort, no autofocus in progress for an active job.";
+                break;
+            }
             if (!(getMeridianFlipState()->getMeridianFlipStage() == MeridianFlipState::MF_INITIATED))
             {
                 // Meridian flip will abort focusing. In this case, after the meridian flip has completed capture

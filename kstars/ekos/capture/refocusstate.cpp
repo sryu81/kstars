@@ -62,7 +62,8 @@ RefocusState::RefocusReason RefocusState::checkFocusRequired()
     }
 
     // 4. check if post meridian flip refocusing is necessary
-    if (!isRefocusing() && isRefocusAfterMeridianFlip())
+    // the option is re-checked since the flag may have been set under a different sequence's settings
+    if (!isRefocusing() && isRefocusAfterMeridianFlip() && Options::refocusAfterMeridianFlip())
     {
         setRefocusing(true);
         appendLogText(i18n("Refocus after meridian flip"));

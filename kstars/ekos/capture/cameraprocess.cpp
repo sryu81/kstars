@@ -360,6 +360,22 @@ void CameraProcess::stopCapturing(CaptureState targetState)
     m_CaptureOperationsTimer.invalidate();
 
     state()->resetAlignmentRetries();
+
+    if (targetState == CAPTURE_ABORTED || targetState == CAPTURE_COMPLETE || targetState == CAPTURE_IDLE)
+    {
+        // Capture ends here, so pending post-flip actions are moot. Leaving the stage at
+        // MF_COMPLETED/MF_ALIGNING/MF_GUIDING (e.g. after post-flip align or guiding failed and
+        // aborted capture) would make later captures drop every received frame.
+        const auto stage = state()->getMeridianFlipState()->getMeridianFlipStage();
+        if (stage == MeridianFlipState::MF_COMPLETED || stage == MeridianFlipState::MF_ALIGNING
+                || stage == MeridianFlipState::MF_GUIDING)
+        {
+            qCDebug(KSTARS_EKOS_CAPTURE) << "Capture stopped during post meridian flip stage" << stage << ", resetting it.";
+            state()->updateMeridianFlipStage(MeridianFlipState::MF_NONE);
+        }
+        // a pending refocus request from an earlier flip must not trigger on the next job
+        state()->getRefocusState()->setRefocusAfterMeridianFlip(false);
+    }
     //seqTotalCount   = 0;
     //seqCurrentCount = 0;
 
@@ -2647,6 +2663,9 @@ bool CameraProcess::loadSequenceQueue(const QString &fileURL,
         KSNotification::sorry(message, i18n("Could Not Open File"));
         return false;
     }
+
+    // a refocus request latched by an earlier meridian flip belongs to the previous sequence
+    state()->getRefocusState()->setRefocusAfterMeridianFlip(false);
 
     if (setOptions)
     {

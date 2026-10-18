@@ -3612,6 +3612,14 @@ void Manager::connectModules()
                 Qt::UniqueConnection);
         connect(captureModule(), &Ekos::Capture::guideAfterMeridianFlip, mountModule(), &Ekos::Mount::resumeAltLimits,
                 Qt::UniqueConnection);
+        // guideAfterMeridianFlip only fires when guiding is resumed after the flip, so also resume
+        // the limits once the flip itself has completed (resumeAltLimits is a no-op if already active)
+        connect(mountModule()->getMeridianFlipState().get(), &Ekos::MeridianFlipState::newMountMFStatus, mountModule(),
+                [this](MeridianFlipState::MeridianFlipMountState status)
+        {
+            if (status == MeridianFlipState::MOUNT_FLIP_COMPLETED)
+                mountModule()->resumeAltLimits();
+        });
 
         // Mount Status
         connect(mountModule(), &Ekos::Mount::newStatus, captureModule(), &Ekos::Capture::setMountStatus,
