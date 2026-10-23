@@ -264,6 +264,23 @@ void Message::onTextReceived(const QString &message)
         processFileCommands(command, payload);
     else if (command.startsWith("artificial_horizon_"))
         processArtificialHorizonCommands(command, payload);
+    // KStars site/time (2026-09) — direct in-process calls to the already-real, already-scriptable
+    // KStars::setGPSLocation/setLocalTime (kstarsdbus.cpp), same methods KStars' own D-Bus
+    // interface exposes when D-Bus is available — this wire doesn't depend on D-Bus being
+    // registered at all, just calls the singleton directly, same as every other explicit command
+    // in this file. Not module-prefixed (not Ekos-scoped), so handled here rather than one of the
+    // process*Commands() functions below. No reply either way — mirrors setLocalTime/setTimeToNow's
+    // own Q_NOREPLY shape; the client finds out indirectly (new almanac/riseset fetch afterward).
+    else if (command == commands[KSTARS_SET_LOCATION])
+    {
+        KStars::Instance()->setGPSLocation(payload["lon"].toDouble(), payload["lat"].toDouble(),
+                                            payload["elev"].toDouble(), payload["tz"].toDouble());
+    }
+    else if (command == commands[KSTARS_SET_TIME])
+    {
+        KStars::Instance()->setLocalTime(payload["yr"].toInt(), payload["mth"].toInt(), payload["day"].toInt(),
+                                          payload["hr"].toInt(), payload["min"].toInt(), payload["sec"].toInt());
+    }
 
     if (m_Manager->getEkosStartingStatus() != Ekos::Success)
         return;
@@ -924,6 +941,15 @@ void Message::processAlignCommands(const QString &command, const QJsonObject &pa
     else if (command == commands[ALIGN_MANUAL_ROTATOR_TOGGLE])
     {
         align->toggleManualRotator(payload["toggled"].toBool());
+    }
+    else if (command == commands[ALIGN_SET_TARGET_PA])
+    {
+        // Sets the desired camera position angle for the *next* solve (Capture & Solve path in
+        // Align::checkIfRotationRequired()) to pick up — same field Load & Slew sets from a
+        // reference file's own solved PA, just driven by a raw angle instead. Auto-drives a
+        // connected rotator, or surfaces the manual-rotator diff loop
+        // (manualRotatorChanged/align_manual_rotator_status) when none is connected. No reply.
+        align->setTargetPositionAngle(payload["angle"].toDouble());
     }
 }
 

@@ -158,6 +158,7 @@ enum COMMANDS
     ALIGN_SET_ASTROMETRY_SETTINGS,
     ALIGN_MANUAL_ROTATOR_STATUS,
     ALIGN_MANUAL_ROTATOR_TOGGLE,
+    ALIGN_SET_TARGET_PA,
 
     // Scheduler
     SCHEDULER_GET_ALL_SETTINGS,
@@ -266,6 +267,14 @@ enum COMMANDS
     ARTIFICIAL_HORIZON_IMPORT,
     ARTIFICIAL_HORIZON_TOGGLE,
     ARTIFICIAL_HORIZON_GET,
+
+    // KStars site/time (2026-09 — Nocturne GPS/time sync from a mobile client; no existing
+    // command reaches KStars::setGPSLocation/setLocalTime — they're Q_SCRIPTABLE on the KStars
+    // singleton itself, not reachable via INVOKE_METHOD's findObject(), which only resolves named
+    // children, never the top-level KStars/Manager objects directly. Direct in-process calls
+    // instead, same as every other explicit command here — no DBus involved.)
+    KSTARS_SET_LOCATION,
+    KSTARS_SET_TIME,
 };
 
 static QMap<COMMANDS, QString> const commands =
@@ -414,6 +423,7 @@ static QMap<COMMANDS, QString> const commands =
     {ALIGN_SET_ASTROMETRY_SETTINGS, "align_set_astrometry_settings"},
     {ALIGN_MANUAL_ROTATOR_STATUS, "align_manual_rotator_status"},
     {ALIGN_MANUAL_ROTATOR_TOGGLE, "align_manual_rotator_toggle"},
+    {ALIGN_SET_TARGET_PA, "align_set_target_pa"},
 
     {PAH_START, "polar_start"},
     {PAH_STOP, "polar_stop"},
@@ -497,6 +507,9 @@ static QMap<COMMANDS, QString> const commands =
     {ARTIFICIAL_HORIZON_IMPORT, "artificial_horizon_import"},
     {ARTIFICIAL_HORIZON_TOGGLE, "artificial_horizon_toggle"},
     {ARTIFICIAL_HORIZON_GET,    "artificial_horizon_get"},
+
+    {KSTARS_SET_LOCATION, "kstars_set_location"},
+    {KSTARS_SET_TIME, "kstars_set_time"},
 };
 
 }
