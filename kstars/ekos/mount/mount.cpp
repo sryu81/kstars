@@ -1822,6 +1822,7 @@ void Mount::connectSettings()
         if (m_Mount)
             m_Mount->Slew(&pos, (m_Mount->canFlip() && Options::forcedFlip()));
     });
+    connect(mf_state.get(), &MeridianFlipState::abortMount, this, &Mount::abort, Qt::UniqueConnection);
 
     // Train combo box should NOT be synced.
     disconnect(opticalTrainCombo, QOverload<int>::of(&QComboBox::activated), this, &Ekos::Mount::syncSettings);
@@ -1840,6 +1841,7 @@ void Mount::disconnectSettings()
                mf_state.get(), &MeridianFlipState::setOffset);
     disconnect(this, &Mount::newParkStatus, mf_state.get(), &MeridianFlipState::setMountParkStatus);
     disconnect(mf_state.get(), &MeridianFlipState::slewTelescope, nullptr, nullptr);
+    disconnect(mf_state.get(), &MeridianFlipState::abortMount, this, &Mount::abort);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////

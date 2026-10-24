@@ -10,13 +10,18 @@
 
 #include "kstarsdata.h"
 #include "indicom.h"
+#include "ksnotification.h"
 
 #include <ekos_capture_debug.h>
+
+#include <algorithm>
 
 namespace Ekos
 {
 MeridianFlipState::MeridianFlipState(QObject *parent) : QObject(parent)
 {
+    m_flipTimeoutTimer.setSingleShot(true);
+    connect(&m_flipTimeoutTimer, &QTimer::timeout, this, &MeridianFlipState::handleFlipTimeout);
 }
 
 void MeridianFlipState::setResumeAlignmentAfterFlip(bool resume)
@@ -349,6 +354,7 @@ void MeridianFlipState::startMeridianFlip()
 
     updateMinMeridianFlipEndTime();
     updateMFMountState(MeridianFlipState::MOUNT_FLIP_RUNNING);
+    m_flipTimeoutTimer.start(1000 * std::max(MAX_FLIP_DURATION_SECS, static_cast<int>(Options::minFlipDuration()) + 120));
 
     // start the re-slew to the current target expecting that the mount firmware changes the pier side
     Q_EMIT slewTelescope(targetPosition.position);
@@ -385,8 +391,27 @@ void MeridianFlipState::processFlipCompleted()
 }
 
 
+void MeridianFlipState::handleFlipTimeout()
+{
+    if (meridianFlipMountState != MOUNT_FLIP_RUNNING)
+        return;
+
+    const QString message = i18n("Meridian flip did not finish within %1 seconds (mount status: %2), stopping the mount.",
+                                 m_flipTimeoutTimer.interval() / 1000,
+                                 ISD::Mount::mountStates[m_MountStatus].toString());
+    qCWarning(KSTARS_EKOS_MOUNT) << message;
+    Q_EMIT newLog(message);
+    KSNotification::event(QLatin1String("MeridianFlipFailed"), message, KSNotification::Mount, KSNotification::Alert);
+
+    Q_EMIT abortMount();
+    setFlipDelayHrs(0);
+    updateMFMountState(MOUNT_FLIP_ERROR);
+}
+
 void MeridianFlipState::setMeridianFlipMountState(MeridianFlipMountState newMeridianFlipMountState)
 {
+    if (newMeridianFlipMountState != MOUNT_FLIP_RUNNING)
+        m_flipTimeoutTimer.stop();
     qCDebug (KSTARS_EKOS_MOUNT) << "Setting meridian flip status to " << meridianFlipStatusString(newMeridianFlipMountState);
     publishMFMountStatus(newMeridianFlipMountState);
     meridianFlipMountState = newMeridianFlipMountState;
@@ -449,6 +474,10 @@ void MeridianFlipState::publishMFMountStatus(MeridianFlipMountState status)
 
         case MOUNT_FLIP_COMPLETED:
             publishMFMountStatusText(i18n("Meridian flip completed."));
+            break;
+
+        case MOUNT_FLIP_ERROR:
+            publishMFMountStatusText(i18n("Meridian flip failed."));
             break;
 
         default:

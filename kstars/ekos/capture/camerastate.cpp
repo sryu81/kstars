@@ -455,6 +455,17 @@ void CameraState::updateMFMountState(MeridianFlipState::MeridianFlipMountState s
             updateMeridianFlipStage(MeridianFlipState::MF_COMPLETED);
             break;
 
+        case MeridianFlipState::MOUNT_FLIP_ERROR:
+            // the flip slew never finished: give up on this job instead of waiting forever,
+            // the scheduler's error handling decides whether to retry
+            if (getMeridianFlipState()->getMeridianFlipStage() != MeridianFlipState::MF_NONE)
+            {
+                updateMeridianFlipStage(MeridianFlipState::MF_NONE);
+                appendLogText(i18n("Meridian flip failed, aborting capture."));
+                Q_EMIT abortCapture();
+            }
+            break;
+
         default:
             break;
 

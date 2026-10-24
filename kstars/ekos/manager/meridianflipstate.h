@@ -7,6 +7,7 @@
 #pragma once
 
 #include <QObject>
+#include <QTimer>
 #include "skypoint.h"
 
 #include <ekos_mount_debug.h>
@@ -262,6 +263,8 @@ class MeridianFlipState : public QObject
         void slewTelescope(SkyPoint &target);
         // new log text for the module log window
         void newLog(const QString &text);
+        // stop the mount: the flip slew never finished
+        void abortMount();
 
     private:
         // flag if meridian flip is enabled
@@ -306,6 +309,16 @@ class MeridianFlipState : public QObject
         // A meridian flip requires a slew of 180 degrees in the hour angle axis so will take a certain
         // amount of time. Within this time, a slewing state change will be ignored for pier side change checks.
         QDateTime minMeridianFlipEndTime;
+
+        // A flip slew that never reports its end (mount fault, hung serial link) would otherwise
+        // keep the state machine in MOUNT_FLIP_RUNNING forever, with capture waiting on it.
+        QTimer m_flipTimeoutTimer;
+        static constexpr int MAX_FLIP_DURATION_SECS = 300;
+
+        /**
+         * @brief The flip slew did not end in time: stop the mount and go to MOUNT_FLIP_ERROR.
+         */
+        void handleFlipTimeout();
 
         double flipDelayHrs = 0.0;      // delays the next flip attempt if it fails
 
