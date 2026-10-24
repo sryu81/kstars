@@ -618,6 +618,30 @@ void Message::sendGuideSettings(const QVariantMap &settings)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
+/// Per-sample guide error (arcsec), pulses (ms), SNR, sky background and star count.
+/// Shares new_guide_state with the {"status"} push, distinguished by its keys.
+///////////////////////////////////////////////////////////////////////////////////////////
+void Message::sendGuideStats(double raError, double decError, int raPulse, int decPulse,
+                             double snr, double skyBg, int numStars)
+{
+    QJsonObject stats =
+    {
+        {"raError", raError}, {"decError", decError},
+        {"raPulse", raPulse}, {"decPulse", decPulse},
+        {"snr", snr}, {"skyBg", skyBg}, {"numStars", numStars},
+    };
+    sendResponse(commands[NEW_GUIDE_STATE], stats);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+/// Running RMS (arcsec) per axis, same values as the desktop's RMS label.
+///////////////////////////////////////////////////////////////////////////////////////////
+void Message::sendGuideSigma(double rmsRA, double rmsDE)
+{
+    sendResponse(commands[NEW_GUIDE_STATE], QJsonObject{{"rmsRA", rmsRA}, {"rmsDE", rmsDE}});
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////
 void Message::sendFocusSettings(const QVariantMap &settings)
@@ -696,6 +720,14 @@ void Message::processGuideCommands(const QString &command, const QJsonObject &pa
         guide->abort();
     else if (command == commands[GUIDE_CLEAR])
         guide->clearCalibration();
+    else if (command == commands[GUIDE_CALIBRATE])
+        guide->calibrate();
+    else if (command == commands[GUIDE_DITHER])
+        guide->dither();
+    else if (command == commands[GUIDE_SUSPEND])
+        guide->suspend();
+    else if (command == commands[GUIDE_RESUME])
+        guide->resume();
     else if (command == commands[GUIDE_SET_ALL_SETTINGS])
     {
         auto settings = payload.toVariantMap();
@@ -708,7 +740,7 @@ void Message::processGuideCommands(const QString &command, const QJsonObject &pa
     {
 
         Options::setCalibrationPulseDuration(payload["pulse"].toInt());
-        Options::setGuideCalibrationBacklash(payload["max_move"].toInt());
+        Options::setCalibrationMaxMove(payload["max_move"].toInt());
         Options::setTwoAxisEnabled(payload["two_axis"].toBool());
         Options::setGuideAutoSquareSizeEnabled(payload["square_size"].toBool());
         Options::setGuideCalibrationBacklash(payload["calibrationBacklash"].toBool());

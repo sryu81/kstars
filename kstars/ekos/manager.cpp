@@ -3754,6 +3754,12 @@ void Manager::connectModules()
         connect(guideModule(), &Ekos::Guide::settingsUpdated, ekosRemote.get()->message(),
                 &EkosRemote::Message::sendGuideSettings, Qt::UniqueConnection);
 
+        connect(guideModule(), &Ekos::Guide::guideStats, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendGuideStats, Qt::UniqueConnection);
+
+        connect(guideModule(), &Ekos::Guide::newAxisSigma, ekosRemote.get()->message(),
+                &EkosRemote::Message::sendGuideSigma, Qt::UniqueConnection);
+
         connect(guideModule(), &Ekos::Guide::trainChanged, ekosRemote.get()->message(),
                 &EkosRemote::Message::sendTrainProfiles, Qt::UniqueConnection);
 

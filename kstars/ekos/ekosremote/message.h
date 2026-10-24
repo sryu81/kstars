@@ -92,6 +92,9 @@ class Message : public QObject
 
         // Guide
         void sendGuideSettings(const QVariantMap &settings);
+        void sendGuideStats(double raError, double decError, int raPulse, int decPulse,
+                            double snr, double skyBg, int numStars);
+        void sendGuideSigma(double rmsRA, double rmsDE);
 
         // Focus
         void sendFocusSettings(const QVariantMap &settings);
