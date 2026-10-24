@@ -487,25 +487,11 @@ void Mount::syncTelescopeInfo()
         {
             m_Mount->setTrackEnabled(true);
         });
+        // No confirmation dialog: a modal question on the Pi blocks remote clients (EkosRemote
+        // mount_set_tracking) until someone answers it at the Pi.
         connect(trackOffB, &QPushButton::clicked, this, [&]()
         {
-#if KIO_VERSION >= QT_VERSION_CHECK(5, 100, 0)
-            if (KMessageBox::questionTwoActions(KStars::Instance(),
-                                                i18n("Are you sure you want to turn off mount tracking?"),
-                                                i18n("Mount Tracking"),
-                                                KGuiItem(i18nc("@action:button", "Yes")),
-                                                KGuiItem(i18nc("@action:button", "No")),
-                                                "turn_off_mount_tracking_dialog") == KMessageBox::ButtonCode::PrimaryAction)
-                m_Mount->setTrackEnabled(false);
-#else
-            if (KMessageBox::questionYesNo(KStars::Instance(),
-                                           i18n("Are you sure you want to turn off mount tracking?"),
-                                           i18n("Mount Tracking"),
-                                           KStandardGuiItem::yes(),
-                                           KStandardGuiItem::no(),
-                                           "turn_off_mount_tracking_dialog") == KMessageBox::Yes)
-                m_Mount->setTrackEnabled(false);
-#endif
+            m_Mount->setTrackEnabled(false);
         });
     }
     else
@@ -1197,10 +1183,10 @@ void Mount::setScopeStatus(ISD::Mount::Status status)
 
 void Mount::setTrackEnabled(bool enabled)
 {
-    if (enabled)
-        trackOnB->click();
-    else
-        trackOffB->click();
+    if (m_Mount == nullptr)
+        return;
+
+    m_Mount->setTrackEnabled(enabled);
 }
 
 int Mount::slewRate()
