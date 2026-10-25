@@ -140,6 +140,10 @@ void Message::onTextReceived(const QString &message)
     {
         sendConnection();
     }
+    else if (command == commands[GET_LOGS])
+    {
+        sendLogs();
+    }
     else if (command == commands[LOGOUT] || command == commands[SESSION_EXPIRED])
     {
         qCInfo(KSTARS_EKOS) << "Received" << command << "from node" << node->url().toDisplayString()
@@ -2597,6 +2601,62 @@ void Message::sendResponse(const QString &command, bool payload)
 ///////////////////////////////////////////////////////////////////////////////////////////
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////
+///
+///////////////////////////////////////////////////////////////////////////////////////////
+QJsonObject Message::logToJson(const LogLine &line) const
+{
+    QJsonObject o =
+    {
+        {"id", line.id},
+        {"time", line.timeMs},
+        {"module", line.module},
+        {"text", line.text}
+    };
+    if (line.level >= 0)
+        o["level"] = line.level;
+    return o;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+///
+///////////////////////////////////////////////////////////////////////////////////////////
+void Message::appendLog(const QString &module, const QString &text, int level)
+{
+    static constexpr int MAX_BUFFERED_LINES = 2000;
+    static constexpr int MAX_LINE_LENGTH = 1000;
+
+    if (text.trimmed().isEmpty())
+        return;
+
+    LogLine line;
+    line.id = m_LogRun + QStringLiteral(":") + QString::number(++m_LogSeq);
+    line.timeMs = QDateTime::currentMSecsSinceEpoch();
+    line.module = module;
+    line.level = level;
+    line.text = text.left(MAX_LINE_LENGTH);
+
+    m_LogBuffer.append(line);
+    while (m_LogBuffer.size() > MAX_BUFFERED_LINES)
+        m_LogBuffer.removeFirst();
+
+    sendResponse(commands[NEW_LOG], logToJson(line));
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+///
+///////////////////////////////////////////////////////////////////////////////////////////
+void Message::sendLogs()
+{
+    QJsonArray lines;
+    for (const auto &line : m_LogBuffer)
+        lines.append(logToJson(line));
+    sendResponse(commands[GET_LOGS], QJsonObject{{"lines", lines}});
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+///
+///////////////////////////////////////////////////////////////////////////////////////////
 void Message::sendEvent(const QString &command, const QJsonObject &payload)
 {
     for (auto &nodeManager : m_NodeManagers)
@@ -2845,6 +2905,18 @@ void Message::processDeleteProperty(INDI::Property prop)
 ///////////////////////////////////////////////////////////////////////////////////////////
 void Message::processMessage(const QSharedPointer<ISD::GenericDevice> &device, const QString &message)
 {
+    // The log keeps every driver message, whatever the notification setting says: it is the record
+    // of what the drivers said, not an alert.
+    if (!message.isEmpty())
+    {
+        static const QRegularExpression levelTag(QStringLiteral("\\[(INFO|WARNING|ERROR)\\]"));
+        static const QRegularExpression stamp(QStringLiteral("^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+:\\s*"));
+        const auto tag = levelTag.match(message);
+        const int level = !tag.hasMatch() ? -1 : (tag.captured(1) == "ERROR" ? 2 : (tag.captured(1) == "WARNING" ? 1 : 0));
+        QString text = message;
+        text.remove(stamp);
+        appendLog(QStringLiteral("INDI"), device->getDeviceName() + QStringLiteral(": ") + text.trimmed(), level);
+    }
 
     if (Options::ekosRemoteNotifications() == false)
         return;

@@ -18,6 +18,8 @@
 #include "catalogsdb.h"
 #include "nodemanager.h"
 #include <QQueue>
+#include <QDateTime>
+#include <QList>
 
 namespace EkosRemote
 {
@@ -49,6 +51,15 @@ class Message : public QObject
         void updateDomeStatus(const QJsonObject &status);
         void updateCapStatus(const QJsonObject &status);
         void updateAlignStatus(const QJsonObject &status);
+
+        /**
+         * Logs one line for the client: pushed at once as `new_log` and kept in a short buffer that
+         * `get_logs` returns on (re)connect. Unlike the per-module `{"log": ...}` pushes, which resend
+         * a module's whole history on every line, this sends each line once.
+         * @param module "Capture", "Align", "Focus", "Guide", "Scheduler", "Mount", "Ekos" or "INDI"
+         * @param level -1 unknown (the client guesses), 0 info, 1 warning, 2 error
+         */
+        void appendLog(const QString &module, const QString &text, int level = -1);
 
         // Send devices as they come
         void sendEvent(const QString &message, KSNotification::EventSource source, KSNotification::EventType event);
@@ -162,6 +173,22 @@ class Message : public QObject
         void onTextReceived(const QString &);
 
     private:
+        // Logs
+        struct LogLine
+        {
+            QString id;
+            qint64 timeMs;
+            QString module;
+            int level;
+            QString text;
+        };
+        QJsonObject logToJson(const LogLine &line) const;
+        void sendLogs();
+        QList<LogLine> m_LogBuffer;
+        qint64 m_LogSeq {0};
+        // Distinguishes line ids across KStars restarts, so a client can drop lines it already has.
+        const QString m_LogRun { QString::number(QDateTime::currentMSecsSinceEpoch(), 36) };
+
         // Profiles
         void sendProfiles();
         void setProfileMapping(const QJsonObject &payload);

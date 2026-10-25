@@ -400,6 +400,10 @@ Manager::Manager(QWidget * parent) : QDialog(parent), m_networkManager(this)
     toolsWidget->tabBar()->setTabToolTip(index, i18n("Scheduler"));
     capturePreview->shareSchedulerModuleState(schedulerModule()->moduleState());
     connect(schedulerModule()->process().data(), &SchedulerProcess::newLog, this, &Ekos::Manager::updateLog);
+    connect(schedulerModule()->process().data(), &SchedulerProcess::newLog, ekosRemote.get()->message(), [this](const QString & text)
+    {
+        ekosRemote.get()->message()->appendLog("Scheduler", text);
+    });
     connect(schedulerModule(), &Ekos::Scheduler::newTarget, this, &Manager::setTarget);
     // Scheduler <---> EkosRemote connections
     connect(schedulerModule(), &Ekos::Scheduler::jobsUpdated, ekosRemote.get()->message(),
@@ -2399,6 +2403,9 @@ void Manager::appendLogText(const QString &text)
 
     Q_EMIT newLog(text);
 
+    if (ekosRemote)
+        ekosRemote.get()->message()->appendLog("Ekos", text);
+
     updateLog();
 }
 
@@ -2455,6 +2462,10 @@ void Manager::initCapture()
         toolsWidget->setTabIcon(index, icon);
     }
     connect(captureModule(), &Ekos::Capture::newLog, this, &Ekos::Manager::updateLog);
+    connect(captureModule(), &Ekos::Capture::newLog, ekosRemote.get()->message(), [this](const QString & text)
+    {
+        ekosRemote.get()->message()->appendLog("Capture", text);
+    });
     connect(captureModule(), &Ekos::Capture::newLog, this, [this]()
     {
         QJsonObject cStatus =
@@ -2498,6 +2509,10 @@ void Manager::initAlign()
     int index = addModuleTab(EkosModule::Align, alignModule(), QIcon(":/icons/ekos_align.png"));
     toolsWidget->tabBar()->setTabToolTip(index, i18n("Align"));
     connect(alignModule(), &Ekos::Align::newLog, this, &Ekos::Manager::updateLog);
+    connect(alignModule(), &Ekos::Align::newLog, ekosRemote.get()->message(), [this](const QString & text)
+    {
+        ekosRemote.get()->message()->appendLog("Align", text);
+    });
     connect(alignModule(), &Ekos::Align::newLog, this, [this]()
     {
         QJsonObject cStatus =
@@ -2548,6 +2563,10 @@ void Manager::initFocus()
             &Ekos::FocusProgressWidget::updateFocusStarPixmap);
     connect(focusModule()->mainFocuser().get(), &Ekos::Focus::newHFR, this, &Ekos::Manager::updateCurrentHFR);
     connect(focusModule()->mainFocuser().get(), &Ekos::Focus::focuserTimedout, this, &Ekos::Manager::restartDriver);
+    connect(focusModule(), &Ekos::FocusModule::newLog, ekosRemote.get()->message(), [this](const QString & text)
+    {
+        ekosRemote.get()->message()->appendLog("Focus", text);
+    });
     connect(focusModule(), &Ekos::FocusModule::newLog, this, [this]()
     {
         // update the logging in the client
@@ -2688,6 +2707,10 @@ void Manager::initMount()
 
     toolsWidget->tabBar()->setTabToolTip(index, i18n("Mount"));
     connect(mountModule(), &Ekos::Mount::newLog, this, &Ekos::Manager::updateLog);
+    connect(mountModule(), &Ekos::Mount::newLog, ekosRemote.get()->message(), [this](const QString & text)
+    {
+        ekosRemote.get()->message()->appendLog("Mount", text);
+    });
     connect(mountModule(), &Ekos::Mount::newCoords, this, &Ekos::Manager::updateMountCoords);
     connect(mountModule(), &Ekos::Mount::newStatus, this, &Ekos::Manager::updateMountStatus);
     connect(mountModule(), &Ekos::Mount::newTargetName, this, [this](const QString & name)
@@ -2763,6 +2786,10 @@ void Manager::initGuide()
         int index = addModuleTab(EkosModule::Guide, guideModule(), QIcon(":/icons/ekos_guide.png"));
         toolsWidget->tabBar()->setTabToolTip(index, i18n("Guide"));
         connect(guideModule(), &Ekos::Guide::newLog, this, &Ekos::Manager::updateLog);
+        connect(guideModule(), &Ekos::Guide::newLog, ekosRemote.get()->message(), [this](const QString & text)
+        {
+            ekosRemote.get()->message()->appendLog("Guide", text);
+        });
         connect(guideModule(), &Ekos::Guide::driverTimedout, this, &Ekos::Manager::restartDriver);
 
         guideManager->setEnabled(true);
