@@ -1365,6 +1365,7 @@ void Message::processProfileCommands(const QString &command, const QJsonObject &
         KStars::Instance()->clearAllViewers();
 
         m_PropertySubscriptions.clear();
+        m_FullySubscribed.clear();
     }
     else if (command == commands[ADD_PROFILE])
     {
@@ -1737,6 +1738,7 @@ void Message::processDeviceCommands(const QString &command, const QJsonObject &p
     if (device.isEmpty() && command == commands[DEVICE_PROPERTY_UNSUBSCRIBE])
     {
         m_PropertySubscriptions.clear();
+        m_FullySubscribed.clear();
         return;
     }
 
@@ -1808,6 +1810,7 @@ void Message::processDeviceCommands(const QString &command, const QJsonObject &p
         {
             for (auto &oneProp : *oneDevice->getProperties())
                 props.insert(oneProp.getName());
+            m_FullySubscribed.insert(device);
         }
 
         m_PropertySubscriptions[device] = props;
@@ -1821,6 +1824,9 @@ void Message::processDeviceCommands(const QString &command, const QJsonObject &p
         QSet<QString> props;
         if (m_PropertySubscriptions.contains(device))
             props = m_PropertySubscriptions[device];
+
+        // Whatever is removed, the client no longer follows the whole device.
+        m_FullySubscribed.remove(device);
 
         // If it is just a single property, let's insert it to props.
         // If it is just a single property, let's insert it to props.
@@ -2946,10 +2952,10 @@ void Message::processMessage(const QSharedPointer<ISD::GenericDevice> &device, c
 ///////////////////////////////////////////////////////////////////////////////////////////
 void Message::processUpdateProperty(INDI::Property prop)
 {
-    if (m_PropertySubscriptions.contains(prop.getDeviceName()))
+    if (m_FullySubscribed.contains(prop.getDeviceName()) || m_PropertySubscriptions.contains(prop.getDeviceName()))
     {
-        QSet<QString> subProps = m_PropertySubscriptions[prop.getDeviceName()];
-        if (subProps.contains(prop.getName()))
+        const QSet<QString> subProps = m_PropertySubscriptions.value(prop.getDeviceName());
+        if (m_FullySubscribed.contains(prop.getDeviceName()) || subProps.contains(prop.getName()))
         {
             PendingProperty pending{prop.getDeviceName(), prop.getName()};
             m_PendingProperties.remove(pending);

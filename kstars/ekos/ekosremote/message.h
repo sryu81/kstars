@@ -298,6 +298,10 @@ class Message : public QObject
         bool m_sendBlobs { true};
 
         QMap < QString, QSet < QString >> m_PropertySubscriptions;
+        // Devices a client subscribed to as a whole (no property or group list). A driver keeps
+        // defining properties after that (a camera's cooler, temperature and fan arrive well after
+        // CONNECTION flips), so "all" has to mean all of them, not the ones that existed then.
+        QSet<QString> m_FullySubscribed;
         QLineF correctionVector;
         QRect m_BoundingRect;
         QSize m_ViewSize;
