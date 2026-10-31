@@ -41,6 +41,7 @@ Server::Server(Ekos::Manager *manager) : QDialog(manager), m_Manager(manager)
     // When the native livestacker starts/stops, suppress raw capture frames so
     // the App only receives the stacked results (delivered via PictureMonitor).
     connect(m_Message, &Message::liveStackingActiveChanged, m_Media, &Media::setLiveStackingActive);
+    connect(m_Message, &Message::filePreviewRequested, m_Media, &Media::sendFilePreview);
 }
 
 Server::~Server()

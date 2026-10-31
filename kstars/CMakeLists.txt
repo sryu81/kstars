@@ -425,6 +425,7 @@ if (INDI_FOUND)
             # Ekos Live
             ekos/ekosremote/ekosremoteserver.cpp
             ekos/ekosremote/filebrowser.cpp
+            ekos/ekosremote/fileops.cpp
             ekos/ekosremote/message.cpp
             ekos/ekosremote/media.cpp
             ekos/ekosremote/node.cpp

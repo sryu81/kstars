@@ -10,6 +10,7 @@
 #include "message.h"
 #include "commands.h"
 #include "filebrowser.h"
+#include "fileops.h"
 #include "profileinfo.h"
 #include "indi/drivermanager.h"
 #include "indi/indilistener.h"
@@ -58,6 +59,12 @@ Message::Message(Ekos::Manager *manager, QVector<QSharedPointer<NodeManager >> &
         connect(nodeManager->message(), &Node::disconnected, this, &Message::onDisconnected);
         connect(nodeManager->message(), &Node::onTextReceived, this, &Message::onTextReceived);
     }
+
+    m_FileOps = new FileOps(this);
+    connect(m_FileOps, &FileOps::progress, this, [this](const QJsonObject & snapshot)
+    {
+        sendResponse(commands[FILE_PROGRESS], snapshot);
+    });
 
     connect(manager, &Ekos::Manager::newModule, this, &Message::sendModuleState);
     connect(INDIListener::Instance(), &INDIListener::deviceRemoved,
@@ -2377,6 +2384,39 @@ void Message::processAstronomyCommands(const QString &command, const QJsonObject
     }
 }
 
+/// The folder the running capture job writes to (canonical), empty when nothing is capturing.
+QString Message::activeCaptureDir() const
+{
+    if (auto capture = m_Manager->captureModule())
+    {
+        if (auto activeJob = capture->mainCamera()->activeJob())
+        {
+            const QString signature = activeJob->getCoreProperty(Ekos::SequenceJob::SJ_Signature).toString();
+            if (!signature.isEmpty())
+                return FileBrowser::canonical(QFileInfo(signature).absoluteDir().path());
+        }
+    }
+    return QString();
+}
+
+bool Message::isCapturing() const
+{
+    auto capture = m_Manager->captureModule();
+    return capture && capture->mainCamera()->activeJob();
+}
+
+/// Runs @p work off the GUI thread (a stalled drive must not freeze KStars) and replies with its result.
+void Message::replyOffGui(int command, std::function<QJsonObject()> work)
+{
+    auto *watcher = new QFutureWatcher<QJsonObject>(this);
+    connect(watcher, &QFutureWatcher<QJsonObject>::finished, this, [this, watcher, command]()
+    {
+        sendResponse(commands[static_cast<COMMANDS>(command)], watcher->result());
+        watcher->deleteLater();
+    });
+    watcher->setFuture(QtConcurrent::run(work));
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -2394,32 +2434,78 @@ void Message::processFileCommands(const QString &command, const QJsonObject &pay
     else if (command == commands[FILE_LIST])
     {
         const QString path = payload["path"].toString();
-
-        // The folder a running capture writes to, read here on the GUI thread; the listing itself
-        // runs off it so a stalled drive cannot freeze KStars (and a capture with it).
-        QString activeDir;
-        bool capturing = false;
-        if (auto capture = m_Manager->captureModule())
-        {
-            if (auto activeJob = capture->mainCamera()->activeJob())
-            {
-                capturing = true;
-                const QString signature = activeJob->getCoreProperty(Ekos::SequenceJob::SJ_Signature).toString();
-                if (!signature.isEmpty())
-                    activeDir = FileBrowser::canonical(QFileInfo(signature).absoluteDir().path());
-            }
-        }
-
-        auto *watcher = new QFutureWatcher<QJsonObject>(this);
-        connect(watcher, &QFutureWatcher<QJsonObject>::finished, this, [this, watcher]()
-        {
-            sendResponse(commands[FILE_LIST], watcher->result());
-            watcher->deleteLater();
-        });
-        watcher->setFuture(QtConcurrent::run([path, activeDir, capturing]()
+        const QString activeDir = activeCaptureDir();
+        const bool capturing = isCapturing();
+        replyOffGui(FILE_LIST, [path, activeDir, capturing]()
         {
             return FileBrowser::listFolder(path, activeDir, capturing);
-        }));
+        });
+    }
+    else if (command == commands[FILE_HEADER])
+    {
+        const QString path = payload["path"].toString();
+        replyOffGui(FILE_HEADER, [path]()
+        {
+            return FileBrowser::readHeader(path);
+        });
+    }
+    else if (command == commands[FILE_PREVIEW])
+    {
+        const QString path = payload["path"].toString();
+        QJsonObject reply{{"path", path}};
+        if (!FileBrowser::isAllowedPath(path, false))
+            reply["error"] = "not_allowed";
+        else if (!QFileInfo(path).isFile())
+            reply["error"] = QFileInfo::exists(path) ? "not_file" : "not_found";
+        else if (!FileBrowser::isFitsName(path))
+            reply["error"] = "not_fits";
+        else
+        {
+            reply["uuid"] = QString("fp_%1").arg(++m_PreviewSeq);
+            sendResponse(commands[FILE_PREVIEW], reply);
+            Q_EMIT filePreviewRequested(path, reply["uuid"].toString());
+            return;
+        }
+        sendResponse(commands[FILE_PREVIEW], reply);
+    }
+    else if (command == commands[FILE_DELETE] || command == commands[FILE_COPY] || command == commands[FILE_MOVE])
+    {
+        QStringList paths;
+        for (const QJsonValue &v : payload["paths"].toArray())
+            paths << v.toString();
+        const QString op = command == commands[FILE_DELETE] ? "delete" : (command == commands[FILE_COPY] ? "copy" : "move");
+        QJsonObject reply = m_FileOps->start(op, paths, payload["toDrive"].toString(), activeCaptureDir());
+        reply["request"] = command;
+        sendResponse(command, reply);
+    }
+    else if (command == commands[FILE_RENAME])
+    {
+        QJsonObject reply = FileOps::rename(payload["path"].toString(), payload["name"].toString(), activeCaptureDir());
+        sendResponse(commands[FILE_RENAME], reply);
+    }
+    else if (command == commands[FILE_CANCEL])
+    {
+        sendResponse(commands[FILE_CANCEL], m_FileOps->cancel(payload["id"].toInt(-1)));
+    }
+    else if (command == commands[FILE_EJECT])
+    {
+        const QString id = payload["id"].toString();
+        QString mountPoint;
+        for (const QJsonValue &v : FileBrowser::listDrives())
+        {
+            const QJsonObject drive = v.toObject();
+            if (drive["kind"].toString() == "usb" && drive["id"].toString() == id)
+                mountPoint = id;
+        }
+        if (mountPoint.isEmpty())
+            sendResponse(commands[FILE_EJECT], QJsonObject{{"error", "no_such_drive"}, {"id", id}});
+        else if (m_FileOps->drivesInUse().contains(id))
+            sendResponse(commands[FILE_EJECT], QJsonObject{{"error", "busy"}, {"id", id}});
+        else
+            replyOffGui(FILE_EJECT, [mountPoint]()
+        {
+            return FileOps::eject(mountPoint);
+        });
     }
     else if (command == commands[FILE_DIRECTORY_OPERATION])
     {

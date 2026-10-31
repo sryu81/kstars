@@ -9,6 +9,7 @@
 #pragma once
 
 #include <QtWebSockets/QWebSocket>
+#include <functional>
 #include <memory>
 
 #include "ekos/ekos.h"
@@ -23,6 +24,8 @@
 
 namespace EkosRemote
 {
+class FileOps;
+
 class Message : public QObject
 {
         Q_OBJECT
@@ -81,6 +84,8 @@ class Message : public QObject
         void globalLogoutTriggered(const QUrl &url);
         void optionsUpdated();
         void resetPolarView();
+        // A file_preview was accepted: Media loads the FITS file and sends the JPEG under this uuid.
+        void filePreviewRequested(const QString &path, const QString &uuid);
         // Emitted when the native KStars livestacker starts (true) or stops (false)
         void liveStackingActiveChanged(bool active);
 
@@ -173,6 +178,9 @@ class Message : public QObject
         void onTextReceived(const QString &);
 
     private:
+        FileOps *m_FileOps {nullptr};
+        int m_PreviewSeq {0};
+
         // Logs
         struct LogLine
         {
@@ -245,6 +253,9 @@ class Message : public QObject
 
         // Process file commands
         void processFileCommands(const QString &command, const QJsonObject &payload);
+        QString activeCaptureDir() const;
+        bool isCapturing() const;
+        void replyOffGui(int command, std::function<QJsonObject()> work);
 
         // Process Artificial Horizon commands
         void processArtificialHorizonCommands(const QString &command, const QJsonObject &payload);

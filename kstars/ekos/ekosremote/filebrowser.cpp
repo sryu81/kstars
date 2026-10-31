@@ -8,6 +8,7 @@
 
 #include <QDir>
 #include <QDirIterator>
+#include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QStorageInfo>
@@ -129,6 +130,107 @@ QJsonArray listDrives()
         });
     }
     return drives;
+}
+
+bool isFitsName(const QString &name)
+{
+    const QString lower = name.toLower();
+    return lower.endsWith(".fits") || lower.endsWith(".fit") || lower.endsWith(".fts");
+}
+
+QJsonObject readHeader(const QString &path)
+{
+    QJsonObject out{{"path", path}};
+
+    if (!isAllowedPath(path, false))
+    {
+        out["error"] = "not_allowed";
+        return out;
+    }
+    const QFileInfo info(path);
+    if (!info.exists())
+    {
+        out["error"] = "not_found";
+        return out;
+    }
+    if (!info.isFile())
+    {
+        out["error"] = "not_file";
+        return out;
+    }
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        out["error"] = "not_found";
+        return out;
+    }
+
+    constexpr int CardSize = 80;
+    constexpr int BlockSize = 2880;
+    constexpr int MaxBlocks = 64; // 5,000+ cards: a header this long is not a camera frame
+
+    QByteArray block = file.read(BlockSize);
+    if (block.size() < BlockSize || !block.startsWith("SIMPLE  ="))
+    {
+        out["error"] = "not_fits";
+        return out;
+    }
+
+    QJsonArray records;
+    for (int blocks = 0; blocks < MaxBlocks; ++blocks)
+    {
+        for (int at = 0; at + CardSize <= block.size(); at += CardSize)
+        {
+            const QByteArray card = block.mid(at, CardSize);
+            const QString key = QString::fromLatin1(card.left(8)).trimmed();
+            if (key == "END")
+            {
+                out["records"] = records;
+                return out;
+            }
+            // Only a card with "= " in columns 9-10 carries a value.
+            if (key.isEmpty() || card.mid(8, 2) != "= ")
+                continue;
+
+            const QByteArray field = card.mid(10);
+            QString value;
+            if (field.trimmed().startsWith('\''))
+            {
+                // A string: up to the closing quote, '' standing for one quote.
+                const int open = field.indexOf('\'');
+                int i = open + 1;
+                QByteArray text;
+                while (i < field.size())
+                {
+                    if (field[i] == '\'')
+                    {
+                        if (i + 1 < field.size() && field[i + 1] == '\'')
+                        {
+                            text.append('\'');
+                            i += 2;
+                            continue;
+                        }
+                        break;
+                    }
+                    text.append(field[i++]);
+                }
+                value = QString::fromLatin1(text).trimmed();
+            }
+            else
+            {
+                const int slash = field.indexOf('/');
+                value = QString::fromLatin1(slash < 0 ? field : field.left(slash)).trimmed();
+            }
+            records.append(QJsonObject{{"key", key}, {"value", value}});
+        }
+        block = file.read(BlockSize);
+        if (block.size() < BlockSize)
+            break;
+    }
+
+    out["error"] = "not_fits"; // no END card within the limit
+    return out;
 }
 
 QJsonObject listFolder(const QString &path, const QString &activeDir, bool capturing)

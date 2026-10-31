@@ -41,6 +41,17 @@ QString canonical(const QString &path);
  */
 QJsonArray listDrives();
 
+/** Whether @p name ends in .fits, .fit or .fts (any case). */
+bool isFitsName(const QString &name);
+
+/**
+ * The header cards of the FITS file at @p path as `{path, records: [{key, value}]}`, read straight
+ * from the first header blocks (80-character cards, 2,880-byte blocks) without decoding any pixels.
+ * String values lose their quotes; COMMENT, HISTORY and blank cards are skipped. Failure is
+ * `{path, error}` with `not_allowed`, `not_found`, `not_file` or `not_fits`.
+ */
+QJsonObject readHeader(const QString &path);
+
 /**
  * Lists @p path, newest first. Entries: `{name, isDir, size, modified}` and, for folders, `count`
  * (direct children), `bytes` (recursive, from a budget of entries shared by the whole request) and

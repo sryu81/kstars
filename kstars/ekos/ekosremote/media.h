@@ -9,6 +9,7 @@
 #pragma once
 
 #include <QtWebSockets/QWebSocket>
+#include <atomic>
 #include <memory>
 
 #include "ekos/manager.h"
@@ -51,6 +52,10 @@ class Media : public QObject
         void newImage(const QByteArray &image, const QString &uuid);
 
     public Q_SLOTS:
+        // File manager: loads a FITS file from the rig's storage and sends its JPEG under @p uuid. The
+        // load, stretch and JPEG run off the GUI thread; a newer request makes an older one drop its result.
+        void sendFilePreview(const QString &filename, const QString &uuid);
+
         // Capture
         void sendVideoFrame(const QSharedPointer<QImage> &frame);
 
@@ -97,6 +102,7 @@ class Media : public QObject
         QLineF correctionVector;
 
         bool m_sendBlobs { true };
+        std::atomic<int> m_latestFilePreview { 0 };
         // When the native KStars livestacker is active, raw capture frames are
         // suppressed so only the stacked results (delivered via PictureMonitor)
         // reach the App.

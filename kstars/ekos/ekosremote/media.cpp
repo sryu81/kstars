@@ -329,6 +329,31 @@ void Media::sendFile(const QString &filename, const QString &uuid)
 ///////////////////////////////////////////////////////////////////////////////////////////
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////
+void Media::sendFilePreview(const QString &filename, const QString &uuid)
+{
+    if (m_sendBlobs == false || isConnected() == false)
+        return;
+
+    // The sequence number is the uuid's tail ("fp_<n>"): a request that is no longer the newest drops its result.
+    const int seq = uuid.mid(3).toInt();
+    m_latestFilePreview = seq;
+    auto work = [this, filename, uuid, seq]()
+    {
+        QSharedPointer<FITSData> data(new FITSData());
+        if (!data->loadFromFile(filename).result() || seq != m_latestFilePreview.load())
+            return;
+        sendData(data, uuid);
+    };
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    (void)QtConcurrent::run(work);
+#else
+    QtConcurrent::run(work);
+#endif
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+///
+///////////////////////////////////////////////////////////////////////////////////////////
 void Media::sendView(const QSharedPointer<FITSView> &view, const QString &uuid)
 {
     if (m_sendBlobs == false || isConnected() == false)
