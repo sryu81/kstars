@@ -17,6 +17,12 @@
 #include <QPainter>
 #include <QtConcurrent>
 
+namespace
+{
+// Pen width in image pixels for the Align overlay (RA-axis ring, correction triangle, star circle).
+constexpr int OverlayLineWidth = 5;
+}
+
 AlignView::AlignView(QWidget *parent, FITSMode mode, FITSScale filter) : FITSView(parent, mode, filter)
 {
 }
@@ -98,13 +104,14 @@ void AlignView::drawTriangle(QPainter *painter, const QPointF &from, const QPoin
     const double scale = getScale();
 
     // Some of the points may be out of the image.
-    painter->setPen(QPen(Qt::magenta, 2));
+    // Wide, fully saturated and round-capped so the lines survive the JPEG and the phone's downscale.
+    painter->setPen(QPen(Qt::magenta, OverlayLineWidth, Qt::SolidLine, Qt::RoundCap));
     painter->drawLine(from.x() * scale, from.y() * scale, to.x() * scale, to.y() * scale);
 
-    painter->setPen(QPen(Qt::yellow, 3));
+    painter->setPen(QPen(Qt::yellow, OverlayLineWidth, Qt::SolidLine, Qt::RoundCap));
     painter->drawLine(from.x() * scale, from.y() * scale, altTo.x() * scale, altTo.y() * scale);
 
-    painter->setPen(QPen(Qt::green, 3));
+    painter->setPen(QPen(Qt::green, OverlayLineWidth, Qt::SolidLine, Qt::RoundCap));
     painter->drawLine(altTo.x() * scale, altTo.y() * scale, to.x() * scale, to.y() * scale);
 
     // In limited memory mode, WCS data is not loaded so no Equatorial Gridlines are drawn
@@ -139,7 +146,7 @@ void AlignView::drawStarCircle(QPainter *painter, const QPointF &center, double 
     QPointF pt(center.x() * scale, center.y() * scale);
 
     // Could get fancy and change from yellow to green when closer to the green line.
-    painter->setPen(QPen(color, 1));
+    painter->setPen(QPen(color, OverlayLineWidth));
     painter->drawEllipse(pt, radius, radius);
 }
 
@@ -148,9 +155,10 @@ void AlignView::drawRaAxis(QPainter *painter)
     if (raAxis.isNull() || !m_ImageData->contains(raAxis))
         return;
 
+    // Solid, not dashed: a dashed ring breaks into dots after JPEG and downscaling.
     QPen pen(Qt::green);
-    pen.setWidth(2);
-    pen.setStyle(Qt::DashLine);
+    pen.setWidth(OverlayLineWidth);
+    pen.setStyle(Qt::SolidLine);
     painter->setPen(pen);
     painter->setBrush(Qt::NoBrush);
 
@@ -163,7 +171,12 @@ void AlignView::drawRaAxis(QPainter *painter)
     // Small radius
     const double sr = r / 25.0;
 
+    // The small ring is only a few pixels across; a wide pen would fill it in.
+    pen.setWidth(2);
+    painter->setPen(pen);
     painter->drawEllipse(center, sr, sr);
+    pen.setWidth(OverlayLineWidth);
+    painter->setPen(pen);
     painter->drawEllipse(center, r, r);
     pen.setColor(Qt::darkGreen);
     painter->setPen(pen);
