@@ -9,6 +9,7 @@
 
 #include "message.h"
 #include "commands.h"
+#include "filebrowser.h"
 #include "profileinfo.h"
 #include "indi/drivermanager.h"
 #include "indi/indilistener.h"
@@ -42,6 +43,8 @@
 #include <KActionCollection>
 #include <basedevice.h>
 #include <QUuid>
+#include <QFutureWatcher>
+#include <QtConcurrent>
 #include <thread>
 
 namespace EkosRemote
@@ -2384,16 +2387,52 @@ void Message::processFileCommands(const QString &command, const QJsonObject &pay
         sendResponse(commands[FILE_DEFAULT_PATH],
                      KSPaths::writableLocation(static_cast<QStandardPaths::StandardLocation>(payload["type"].toInt())));
     }
+    else if (command == commands[FILE_LIST_DRIVES])
+    {
+        sendResponse(commands[FILE_LIST_DRIVES], QJsonObject{{"drives", FileBrowser::listDrives()}});
+    }
+    else if (command == commands[FILE_LIST])
+    {
+        const QString path = payload["path"].toString();
+
+        // The folder a running capture writes to, read here on the GUI thread; the listing itself
+        // runs off it so a stalled drive cannot freeze KStars (and a capture with it).
+        QString activeDir;
+        bool capturing = false;
+        if (auto capture = m_Manager->captureModule())
+        {
+            if (auto activeJob = capture->mainCamera()->activeJob())
+            {
+                capturing = true;
+                const QString signature = activeJob->getCoreProperty(Ekos::SequenceJob::SJ_Signature).toString();
+                if (!signature.isEmpty())
+                    activeDir = FileBrowser::canonical(QFileInfo(signature).absoluteDir().path());
+            }
+        }
+
+        auto *watcher = new QFutureWatcher<QJsonObject>(this);
+        connect(watcher, &QFutureWatcher<QJsonObject>::finished, this, [this, watcher]()
+        {
+            sendResponse(commands[FILE_LIST], watcher->result());
+            watcher->deleteLater();
+        });
+        watcher->setFuture(QtConcurrent::run([path, activeDir, capturing]()
+        {
+            return FileBrowser::listFolder(path, activeDir, capturing);
+        }));
+    }
     else if (command == commands[FILE_DIRECTORY_OPERATION])
     {
         auto path = payload["path"].toString();
         auto operation = payload["operation"].toString();
 
+        // create and remove only act inside a Nocturne folder (never on the folder itself for remove);
+        // list and exists stay as stock.
         if (operation == "create")
         {
             QJsonObject info =
             {
-                {"result", QDir().mkpath(path)},
+                {"result", FileBrowser::isAllowedPath(path, false) && QDir().mkpath(path)},
                 {"operation", operation}
             };
 
@@ -2403,7 +2442,7 @@ void Message::processFileCommands(const QString &command, const QJsonObject &pay
         {
             QJsonObject info =
             {
-                {"result", QDir(path).removeRecursively()},
+                {"result", FileBrowser::isAllowedPath(path, false) && QDir(path).removeRecursively()},
                 {"operation", operation}
             };
 
